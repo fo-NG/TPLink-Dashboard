@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Political Dynasty · Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+:root{--bg:#141417;--sf:#1c1d24;--sf2:#22242e;--br:#2e3040;--tx:#e8eaf0;--mu:#5a5e72;--ac:#f0c040}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:var(--bg);color:var(--tx);font-family:'Noto Sans Thai','Sarabun',system-ui,sans-serif}
+#hdr{padding:10px 20px;background:var(--sf);border-bottom:1px solid var(--br);display:flex;align-items:center;gap:16px}
+.logo{font-size:22px;font-weight:500}.logo2{font-size:18px;color:var(--mu)}.sep{color:var(--br);font-size:18px}
+.back-btn{margin-left:auto;font-size:12px;padding:5px 14px;border-radius:8px;border:1px solid var(--br);background:transparent;color:var(--mu);cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:5px}
+.back-btn:hover{color:var(--tx);border-color:var(--mu)}
+#tabs{display:flex;gap:0;background:var(--sf);border-bottom:1px solid var(--br)}
+.tab{padding:10px 22px;font-size:13px;cursor:pointer;color:var(--mu);border-bottom:2px solid transparent;transition:.12s;user-select:none}
+.tab:hover{color:var(--tx)}
+.tab.on{color:var(--ac);border-bottom-color:var(--ac)}
+.view{display:none;padding:20px}
+.view.on{display:block}
+
+/* ── MAP ── */
+#map-wrap{display:flex;gap:20px;flex-wrap:wrap}
+#map-svg-wrap{flex:1;min-width:300px;position:relative}
+#map-legend{width:200px;flex-shrink:0}
+.map-info{background:var(--sf);border:.5px solid var(--br);border-radius:10px;padding:12px 14px;font-size:12px}
+.map-info-title{font-size:14px;font-weight:500;margin-bottom:8px;color:var(--tx)}
+.map-info-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:.5px solid var(--br);color:var(--mu)}
+.map-info-row:last-child{border-bottom:none}
+.map-info-val{color:var(--tx);font-weight:500}
+.fam-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:2px 7px;border-radius:8px;margin:2px;cursor:pointer}
+.fam-chip.high{background:rgba(240,192,64,.18);color:#f0c040}
+.fam-chip.medium{background:rgba(100,160,255,.15);color:#64a0ff}
+.fam-chip.aoj{border:1px solid rgba(255,100,80,.4)}
+#map-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:500px;background:var(--sf2);border-radius:10px;color:var(--mu);font-size:13px;gap:8px}
+
+/* legend scale */
+.legend-scale{display:flex;gap:0;margin-top:8px;border-radius:4px;overflow:hidden;height:12px}
+.ls-seg{flex:1}
+.ls-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--mu);margin-top:3px}
+.map-dots-legend{margin-top:16px}
+.dot-row{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--mu);margin:5px 0}
+.dot-circle{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
+/* ── TIMELINE ── */
+#tl-wrap{position:relative}
+#tl-controls{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.ctl-btn{font-size:11px;padding:3px 10px;border-radius:10px;cursor:pointer;border:.5px solid var(--br);background:transparent;color:var(--mu);transition:.12s;user-select:none}
+.ctl-btn:hover{color:var(--tx);border-color:var(--mu)}
+.ctl-btn.on{border-color:var(--ac);color:var(--ac);background:rgba(240,192,64,.08)}
+#tl-svg{display:block;width:100%}
+#tl-tooltip{position:fixed;background:rgba(20,21,24,.97);border:.5px solid var(--br);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--tx);pointer-events:none;display:none;max-width:300px;line-height:1.7;box-shadow:0 6px 20px rgba(0,0,0,.5);z-index:99}
+#tl-tooltip b{color:#fff}
+.tl-legend{display:flex;gap:16px;margin-top:8px;flex-wrap:wrap}
+.tl-leg{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mu)}
+.tl-leg-line{width:24px;height:3px;border-radius:2px}
+.stat-row{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.stat-card{background:var(--sf);border:.5px solid var(--br);border-radius:8px;padding:10px 14px;flex:1;min-width:120px}
+.stat-v{font-size:22px;font-weight:500;color:var(--ac);line-height:1}
+.stat-l{font-size:10px;color:var(--mu);margin-top:3px}
+</style>
+</head>
+<body>
+<div id="hdr">
+  <div>
+    <span class="logo">Political Dynasty</span>
+    <span class="sep"> · </span>
+    <span class="logo2">สาแหรกสภา Analytics</span>
+  </div>
+  <a href="saharaek_v4_fixed_25_26_party_counts.html" class="back-btn">← กลับ Sankey หลัก</a>
+</div>
+<div id="tabs">
+  <span class="tab on" onclick="switchView('map',this)">จังหวัดที่กระจุกตัว</span>
+  <span class="tab" onclick="switchView('timeline',this)">Absent Pattern Timeline</span>
+</div>
+
+<!-- MAP VIEW -->
+<div id="v-map" class="view on">
+  <div id="map-wrap">
+    <div id="map-svg-wrap">
+      <div id="map-placeholder">
+        <div style="font-size:32px">🗺</div>
+        <div>กำลังโหลดแผนที่...</div>
+        <div style="font-size:11px">Thailand province boundaries</div>
+      </div>
+    </div>
+    <div id="map-legend">
+      <div class="map-info" id="map-info-panel">
+        <div class="map-info-title">คลิกจังหวัดเพื่อดูรายละเอียด</div>
+        <div style="font-size:11px;color:var(--mu);margin-bottom:10px">สีแสดง HHI (Herfindahl-Hirschman Index) ของการกระจุกตัวของตระกูลการเมืองในแต่ละจังหวัด · น้ำเงิน = กระจาย · แดง = ผูกขาด</div>
+        <div class="map-info-title" style="font-size:12px;margin-bottom:6px">สีตาม HHI (ความกระจุกตัว)</div>
+        <div class="legend-scale" id="map-scale"></div>
+        <div class="ls-labels"><span>0</span><span>5,000</span><span>10,000</span></div>
+        <div class="map-dots-legend" style="margin-top:14px">
+          <div style="font-size:11px;font-weight:500;color:var(--tx);margin-bottom:6px">สัญลักษณ์</div>
+          <div class="dot-row"><span class="dot-circle" style="background:#f0c040"></span>ตระกูล High confidence</div>
+          <div class="dot-row"><span class="dot-circle" style="background:#64a0ff"></span>ตระกูล Medium</div>
+          <div class="dot-row"><span class="dot-circle" style="background:#ff8070;border:2px solid #ff8070"></span>มี AOJ link</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TIMELINE VIEW -->
+<div id="v-timeline" class="view">
+  <div class="stat-row" id="tl-stats"></div>
+  <div id="tl-controls">
+    <span style="font-size:11px;color:var(--mu)">แสดง:</span>
+    <span class="ctl-btn on" onclick="setFilter('all',this)">ทั้งหมด</span>
+    <span class="ctl-btn" onclick="setFilter('local',this)">ท้องถิ่น/ที่ดิน</span>
+    <span class="ctl-btn" onclick="setFilter('sig',this)">มีนัยสำคัญ</span>
+    <span class="ctl-btn" onclick="setFilter('gap',this)">Gap สูงสุด</span>
+    <span style="margin-left:auto;font-size:11px;color:var(--mu)" id="tl-filter-count"></span>
+  </div>
+  <svg id="tl-svg"></svg>
+  <div class="tl-legend">
+    <span class="tl-leg"><span class="tl-leg-line" style="background:#e88040"></span>บ้านใหญ่ ลา/ขาด</span>
+    <span class="tl-leg"><span class="tl-leg-line" style="background:#5090e0"></span>ส.ส. ทั่วไป ลา/ขาด</span>
+    <span class="tl-leg"><span class="tl-leg-line" style="background:#22c55e;height:2px;border-top:2px dashed #22c55e;background:transparent"></span>มติท้องถิ่น/ที่ดิน</span>
+  </div>
+</div>
+
+<div id="tl-tooltip"></div>
+
+<script>
+const DATA = {"province": {"นครปฐม": {"total": 2, "high": 1, "medium": 1, "aoj": 1, "families": [{"surname": "สะสมทรัพย์", "level": "high", "aoj": true, "parties": "พรรคชาติไทยพัฒนา, ภูมิใจไทย"}, {"surname": "แก้วพิจิตร", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคประชาธิปัตย์, พรรครวมไทยสร้างชาติ"}]}, "สระแก้ว": {"total": 1, "high": 1, "medium": 0, "aoj": 1, "families": [{"surname": "เทียนทอง", "level": "high", "aoj": true, "parties": "พรรคพลังประชารัฐ, พรรคเพื่อไทย, พลังประชารัฐ, ไม่ระบุพรรค"}]}, "ศรีสะเกษ": {"total": 8, "high": 1, "medium": 3, "aoj": 1, "families": [{"surname": "ไตรสรณกุล", "level": "high", "aoj": true, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย, ไม่ระบุพรรค"}, {"surname": "อังคสกุลเกียรติ", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "เพ็งนรพัฒน์", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "โหตระไวศยะ", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "จิตสัมฤทธิ์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "อินฉัตร", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "เครือรัตน์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "แซ่จึง", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "สกลนคร": {"total": 4, "high": 1, "medium": 1, "aoj": 1, "families": [{"surname": "สัพโส", "level": "high", "aoj": true, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "บุญศล", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคเพื่อไทย"}, {"surname": "อุประ", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "สาระนันท์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "ระยอง": {"total": 1, "high": 1, "medium": 0, "aoj": 1, "families": [{"surname": "ปิตุเตชะ", "level": "high", "aoj": true, "parties": "ประชาชิปัตย์, พรรคประชาธิปัตย์, ภูมิใจไทย"}]}, "ลพบุรี": {"total": 3, "high": 1, "medium": 2, "aoj": 1, "families": [{"surname": "จิระพันธุ์วาณิช", "level": "high", "aoj": true, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "คลังผา", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "วรปัญญา", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}]}, "สุรินทร์": {"total": 5, "high": 1, "medium": 0, "aoj": 1, "families": [{"surname": "มุ่งเจริญพร", "level": "high", "aoj": true, "parties": "พรรคภูมิใจไทย, พรรคเพื่อไทย, ภูมิใจไทย"}, {"surname": "พูนศรีธนากูล", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, ไม่ระบุพรรค"}, {"surname": "สังข์พุ่ม", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "เจริญพันธ์", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "ศรีสุรินทร์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "ยะลา": {"total": 1, "high": 1, "medium": 0, "aoj": 1, "families": [{"surname": "มะทา", "level": "high", "aoj": true, "parties": "ประชาชาติ, พรรคประชาชาติ"}]}, "ลำปาง": {"total": 2, "high": 1, "medium": 1, "aoj": 1, "families": [{"surname": "โล่ห์สุนทร", "level": "high", "aoj": true, "parties": "พรรคเพื่อไทย"}, {"surname": "จันทรสุรินทร์", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, ไม่ระบุพรรค"}]}, "สตูล": {"total": 2, "high": 1, "medium": 1, "aoj": 1, "families": [{"surname": "เลียงประสิทธิ์", "level": "high", "aoj": true, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "รัชกิจประการ", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}]}, "สุราษฎร์ธานี": {"total": 3, "high": 1, "medium": 2, "aoj": 1, "families": [{"surname": "กาญจนะ", "level": "high", "aoj": true, "parties": "พรรคประชาธิปัตย์, พรรครวมไทยสร้างชาติ, ไทรวมพลัง"}, {"surname": "นิลวัชรมณี", "level": "medium", "aoj": false, "parties": "พรรคประชาธิปัตย์"}, {"surname": "พริ้งศุลกะ", "level": "medium", "aoj": false, "parties": "พรรคประชาธิปัตย์"}]}, "อุดรธานี": {"total": 5, "high": 1, "medium": 2, "aoj": 1, "families": [{"surname": "เพชรพนมพร", "level": "high", "aoj": true, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "ขาวขำ", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "สาราคำ", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "เมนะสวัสดิ์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "ไชยสาส์น", "level": "low", "aoj": false, "parties": "ไม่ระบุพรรค"}]}, "เชียงราย": {"total": 4, "high": 1, "medium": 2, "aoj": 1, "families": [{"surname": "วันไชยธนวงศ์", "level": "high", "aoj": true, "parties": "กล้าธรรม, ภูมิใจไทย, ไม่ระบุพรรค"}, {"surname": "ติยะไพรัช", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "เตชะธีราวัฒน์", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "เจียมวิจักษณ์", "level": "low", "aoj": false, "parties": "กล้าธรรม"}]}, "เพชรบูรณ์": {"total": 5, "high": 1, "medium": 3, "aoj": 1, "families": [{"surname": "ทองใจสด", "level": "high", "aoj": true, "parties": "พรรคพลังประชารัฐ, ภูมิใจไทย"}, {"surname": "พร้อมพัฒน์", "level": "medium", "aoj": false, "parties": "พรรคพลังประชารัฐ, ภูมิใจไทย"}, {"surname": "พั้วช่วย", "level": "medium", "aoj": false, "parties": "พรรคพลังประชารัฐ"}, {"surname": "อนรรฆพันธ์", "level": "medium", "aoj": false, "parties": "พรรคพลังประชารัฐ"}, {"surname": "พรพฤฒิพันธุ์", "level": "low", "aoj": false, "parties": "พรรคพลังประชารัฐ"}]}, "ขอนแก่น": {"total": 5, "high": 1, "medium": 2, "aoj": 1, "families": [{"surname": "ช่างเหลา", "level": "high", "aoj": true, "parties": "พรรคกล้าธรรม, พรรคภูมิใจไทย"}, {"surname": "อรรณนพพร", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, ภูมิใจไทย"}, {"surname": "เตาะเจริญสุข", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย, ไม่ระบุพรรค"}, {"surname": "ฉัตรชัยพลรัตน์", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "ศรีสุรพล", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "ฉะเชิงเทรา": {"total": 4, "high": 1, "medium": 2, "aoj": 1, "families": [{"surname": "ฉายแสง", "level": "high", "aoj": true, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "ตันเจริญ", "level": "medium", "aoj": false, "parties": "พรรคพลังประชารัฐ, พรรคเพื่อไทย"}, {"surname": "ศิริลัทธยากร", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคกล้าธรรม"}, {"surname": "เป้าเปี่ยมทรัพย์", "level": "low", "aoj": false, "parties": "กล้าธรรม, พรรครวมไทยสร้างชาติ"}]}, "ตรัง": {"total": 3, "high": 1, "medium": 0, "aoj": 1, "families": [{"surname": "โล่สถาพรพิพิธ", "level": "high", "aoj": true, "parties": "พรรคประชาธิปัตย์"}, {"surname": "สุระบาล", "level": "low", "aoj": false, "parties": "พรรคพลังประชารัฐ, ภูมิใจไทย"}, {"surname": "หลีกภัย", "level": "low", "aoj": false, "parties": "พรรครวมไทยสร้างชาติ"}]}, "นครราชสีมา": {"total": 11, "high": 1, "medium": 2, "aoj": 1, "families": [{"surname": "หวังศุภกิจโกศล", "level": "high", "aoj": true, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "จันทรรวงทอง", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "รัตนเศรษฐ", "level": "medium", "aoj": false, "parties": "พรรคพลังประชารัฐ"}, {"surname": "ศิริโรจนกุล", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "สุวรรณฉวี", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "อิ่มวิเศษ", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "โตมรศักดิ์", "level": "low", "aoj": false, "parties": "พรรคชาติพัฒนากล้า, เพื่อไทย"}, {"surname": "โสมกลาง", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "ด่านกุล", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "พิทยาภรณ์", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย"}, {"surname": "วงศ์ไตรรัตน์", "level": "low", "aoj": false, "parties": "ภูมิใจไทย"}]}, "พระนครศรีอยุธยา": {"total": 2, "high": 1, "medium": 1, "aoj": 1, "families": [{"surname": "พันธ์เจริญวรกุล", "level": "high", "aoj": true, "parties": "พรรคภูมิใจไทย"}, {"surname": "ชีวานันท์", "level": "medium", "aoj": false, "parties": "ภูมิใจไทย, ไม่ระบุพรรค"}]}, "พัทลุง": {"total": 4, "high": 1, "medium": 1, "aoj": 1, "families": [{"surname": "ธรรมเพชร", "level": "high", "aoj": true, "parties": "พรรคประชาธิปัตย์, พรรครวมไทยสร้างชาติ"}, {"surname": "ขำนุรักษ์", "level": "medium", "aoj": false, "parties": "พรรคประชาธิปัตย์"}, {"surname": "คงมี", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "เทอดวีระพงศ์", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}]}, "อุบลราชธานี": {"total": 11, "high": 1, "medium": 3, "aoj": 1, "families": [{"surname": "กัลป์ตินันท์", "level": "high", "aoj": true, "parties": "พรรคเพื่อไทย"}, {"surname": "สมชัย", "level": "medium", "aoj": false, "parties": "พรรคประชาธิปัตย์, พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "นามบุตร", "level": "medium", "aoj": false, "parties": "พรรคประชาธิปัตย์"}, {"surname": "พิทักษ์พรพัลลภ", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "จินตะเวช", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, พรรคเพื่อไทย, ภูมิใจไทย"}, {"surname": "วาจาดี", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "จรูญเนตร", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "สันตพันธุ์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "ตันติวณิชชานนท์", "level": "low", "aoj": false, "parties": "พรรคไทยสร้างไทย"}, {"surname": "ผาลีพัฒน์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "โควสุรัตน์", "level": "low", "aoj": false, "parties": "ไม่ระบุพรรค"}]}, "สมุทรสาคร": {"total": 3, "high": 1, "medium": 0, "aoj": 1, "families": [{"surname": "ไกรวัตนุสสรณ์", "level": "high", "aoj": true, "parties": "ภูมิใจไทย"}, {"surname": "สุมโนธรรม", "level": "low", "aoj": false, "parties": "ประชาชน, พรรคประชาชน"}, {"surname": "ชวนบุญ", "level": "low", "aoj": false, "parties": "ภูมิใจไทย"}]}, "เพชรบุรี": {"total": 1, "high": 1, "medium": 0, "aoj": 1, "families": [{"surname": "อังกินันทน์", "level": "high", "aoj": true, "parties": "พรรครวมไทยสร้างชาติ"}]}, "ราชบุรี": {"total": 1, "high": 1, "medium": 0, "aoj": 1, "families": [{"surname": "นิติกาญจนา", "level": "high", "aoj": true, "parties": "กล้าธรรม, พรรคกล้าธรรม, พรรคพลังประชารัฐ"}]}, "กระบี่": {"total": 2, "high": 1, "medium": 1, "aoj": 1, "families": [{"surname": "กิตติธรกุล", "level": "high", "aoj": true, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "เกี่ยวข้อง", "level": "medium", "aoj": false, "parties": "พรรคประชาธิปัตย์, พรรคภูมิใจไทย"}]}, "ตาก": {"total": 1, "high": 1, "medium": 0, "aoj": 1, "families": [{"surname": "ทวีเกื้อกูลกิจ", "level": "high", "aoj": true, "parties": "ภูมิใจไทย, ไม่ระบุพรรค"}]}, "มุกดาหาร": {"total": 1, "high": 1, "medium": 0, "aoj": 1, "families": [{"surname": "ทองผา", "level": "high", "aoj": true, "parties": "พรรคพลังประชารัฐ, ภูมิใจไทย"}]}, "ยโสธร": {"total": 4, "high": 1, "medium": 2, "aoj": 1, "families": [{"surname": "สมวงศ์", "level": "high", "aoj": true, "parties": "พรรคเพื่อไทย"}, {"surname": "ศรีชนะ", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "พันธ์สายเชื้อ", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "สลับศรี", "level": "low", "aoj": false, "parties": "พรรคไทยสร้างไทย, ภูมิใจไทย"}]}, "มหาสารคาม": {"total": 7, "high": 1, "medium": 4, "aoj": 1, "families": [{"surname": "จรัสเสถียร", "level": "high", "aoj": true, "parties": "พรรคเพื่อไทย"}, {"surname": "ศิริพานิชย์", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "คลังแสง", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "โชคชัยวัฒนากร", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "อุดรพิมพ์", "level": "medium", "aoj": false, "parties": "ภูมิใจไทย"}, {"surname": "ติณรัตน์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "ทองสมบูรณ์", "level": "low", "aoj": false, "parties": "ภูมิใจไทย"}]}, "อุทัยธานี": {"total": 1, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "ไทยเศรษฐ์", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}]}, "อ่างทอง": {"total": 1, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "ปริศนานันทกุล", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}]}, "เลย": {"total": 3, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "ทิมสุวรรณ", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, พรรคเพื่อไทย, ภูมิใจไทย, เพื่อไทย"}, {"surname": "พัฒนชัยกุล", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "แสงเจริญรัตน์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}]}, "กาฬสินธุ์": {"total": 4, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "พิมพะนิตย์", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "ศรีธเรศ", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "ศิริกุล", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "ไชยศิวามงคล", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "นครศรีธรรมราช": {"total": 4, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "เดชเดโช", "level": "medium", "aoj": false, "parties": "ประชาชิปัตย์, พรรคประชาธิปัตย์"}, {"surname": "วิชัยกุล", "level": "medium", "aoj": false, "parties": "พรรคประชาธิปัตย์, พรรครวมไทยสร้างชาติ, ภูมิใจไทย"}, {"surname": "จริตงาม", "level": "low", "aoj": false, "parties": "พรรคพลังประชารัฐ"}, {"surname": "รัตนพันธ์", "level": "low", "aoj": false, "parties": "พรรคประชาธิปัตย์"}]}, "นราธิวาส": {"total": 3, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "มะยูโซ๊ะ", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคกล้าธรรม, พรรคพลังประชารัฐ"}, {"surname": "ยาวอหะซัน", "level": "medium", "aoj": false, "parties": "พรรคประชาชาติ, พรรคพลังประชารัฐ, พรรครวมไทยสร้างชาติ"}, {"surname": "สะอิ", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}]}, "สงขลา": {"total": 5, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "ขาวทอง", "level": "medium", "aoj": false, "parties": "กล้าธรรม, ประชาชิปัตย์, พรรคประชาธิปัตย์"}, {"surname": "บุญญามณี", "level": "medium", "aoj": false, "parties": "พรรคประชาธิปัตย์"}, {"surname": "นาคสั้ว", "level": "low", "aoj": false, "parties": "กล้าธรรม, พรรคกล้าธรรม"}, {"surname": "พลายด้วง", "level": "low", "aoj": false, "parties": "พรรคประชาธิปัตย์, ภูมิใจไทย"}, {"surname": "เสนเนียม", "level": "low", "aoj": false, "parties": "ไม่ระบุพรรค"}]}, "กำแพงเพชร": {"total": 4, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "อาภรณ์รัตน์", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคกล้าธรรม, พรรคพลังประชารัฐ, ไม่ระบุพรรค"}, {"surname": "ลิกค์", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคกล้าธรรม, พรรคพลังประชารัฐ"}, {"surname": "ผลอำนวย", "level": "low", "aoj": false, "parties": "พรรคพลังประชารัฐ, เพื่อไทย"}, {"surname": "ฤกษ์หร่าย", "level": "low", "aoj": false, "parties": "พรรคพลังประชารัฐ"}]}, "ชัยภูมิ": {"total": 5, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "แทนทรัพย์", "level": "medium", "aoj": false, "parties": "พรรคพลังประชารัฐ, พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "โล่ห์วีระ", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคกล้าธรรม"}, {"surname": "ชาลีรินทร์", "level": "low", "aoj": false, "parties": "พรรคพลังประชารัฐ, พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "เกียรติก้องชูชัย", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "คนสมบูรณ์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "บุรีรัมย์": {"total": 8, "high": 0, "medium": 3, "aoj": 1, "families": [{"surname": "ซารัมย์", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย"}, {"surname": "ชิดชอบ", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย"}, {"surname": "เล็กอุดากร", "level": "medium", "aoj": true, "parties": "ภูมิใจไทย"}, {"surname": "ทองศรี", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "ทิมาตฤกะ", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "เทพอักษรณรงค์", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "ชารัมย์", "level": "low", "aoj": false, "parties": "ภูมิใจไทย"}, {"surname": "ศรีสุริยันโยธิน", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}]}, "พิจิตร": {"total": 2, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "ภัทรประสิทธิ์", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "ขจรประศาสน์", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}]}, "สระบุรี": {"total": 2, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "วงษ์ประยูร", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคกล้าธรรม, พรรคเพื่อไทย"}, {"surname": "คูวิจิตรสุวรรณ", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}]}, "ชัยนาท": {"total": 2, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "นาคาศัย", "level": "medium", "aoj": false, "parties": "พรรครวมไทยสร้างชาติ, เพื่อไทย, ไม่ระบุพรรค"}, {"surname": "สงฆ์ประชา", "level": "medium", "aoj": false, "parties": "พรรคพลังประชารัฐ, พรรคภูมิใจไทย"}]}, "ชุมพร": {"total": 2, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "จุลใส", "level": "medium", "aoj": false, "parties": "พรรครวมพลัง, พรรครวมไทยสร้างชาติ, ไม่ระบุพรรค"}, {"surname": "อ่อนละมัย", "level": "medium", "aoj": false, "parties": "พรรคประชาธิปัตย์"}]}, "ปราจีนบุรี": {"total": 2, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "วิลาวัลย์", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "ภุมมะกาญจนะ", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}]}, "พะเยา": {"total": 3, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "พรหมเผ่า", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคกล้าธรรม, พรรคพลังประชารัฐ"}, {"surname": "ตันบรรจง", "level": "medium", "aoj": false, "parties": "พรรคกล้าธรรม"}, {"surname": "ไชยณรุณ", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "พิษณุโลก": {"total": 3, "high": 0, "medium": 3, "aoj": 0, "families": [{"surname": "เหลืองทองนารา", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "ช่างพินิจ", "level": "medium", "aoj": false, "parties": "ภูมิใจไทย, ไม่ระบุพรรค"}, {"surname": "ไกรฤกษ์", "level": "medium", "aoj": false, "parties": "ภูมิใจไทย"}]}, "ร้อยเอ็ด": {"total": 4, "high": 0, "medium": 4, "aoj": 0, "families": [{"surname": "จุรีมาศ", "level": "medium", "aoj": false, "parties": "พรรคชาติไทยพัฒนา, ภูมิใจไทย"}, {"surname": "พลซื่อ", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคกล้าธรรม"}, {"surname": "สินธุไพร", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "นาเมืองรักษ์", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "สิงห์บุรี": {"total": 1, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "ธนาคมานุสรณ์", "level": "medium", "aoj": false, "parties": "พรรคพลังประชารัฐ, ภูมิใจไทย"}]}, "สุพรรณบุรี": {"total": 4, "high": 0, "medium": 3, "aoj": 0, "families": [{"surname": "เที่ยงธรรม", "level": "medium", "aoj": false, "parties": "พรรคชาติไทยพัฒนา, ภูมิใจไทย"}, {"surname": "โพธสุธน", "level": "medium", "aoj": false, "parties": "พรรคชาติไทยพัฒนา, ภูมิใจไทย"}, {"surname": "ประเสริฐสุวรรณ", "level": "medium", "aoj": false, "parties": "พรรคชาติไทยพัฒนา"}, {"surname": "สุจิตต์", "level": "low", "aoj": false, "parties": "พรรคชาติไทยพัฒนา, ภูมิใจไทย"}]}, "เชียงใหม่": {"total": 3, "high": 0, "medium": 3, "aoj": 0, "families": [{"surname": "อมรวิวัฒน์", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "โตวิจักษณ์ชัยกุล", "level": "medium", "aoj": false, "parties": "ประชาชน, พรรคประชาชน"}, {"surname": "บูรณุปกรณ์", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "แม่ฮ่องสอน": {"total": 1, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "จีนาคำ", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคกล้าธรรม, พรรคพลังประชารัฐ"}]}, "กรุงเทพมหานคร": {"total": 9, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "มีนชัยนันท์", "level": "medium", "aoj": false, "parties": "ประชาชน, พรรคประชาชน"}, {"surname": "คงวุฒิปัญญา", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "จิตตกิจ", "level": "low", "aoj": false, "parties": "ประชาชน, พรรคประชาชน"}, {"surname": "ดวงอัมพร", "level": "low", "aoj": false, "parties": "ประชาชน, พรรคประชาชน"}, {"surname": "พันธุมาศ", "level": "low", "aoj": false, "parties": "ประชาชน, พรรคประชาชน"}, {"surname": "เปรมพูลสวัสดิ์", "level": "low", "aoj": false, "parties": "ประชาชน, พรรคประชาชน"}, {"surname": "วิภัติภูมิประเทศ", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "อยู่บำรุง", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "โหสกุล", "level": "low", "aoj": false, "parties": "ไม่ระบุพรรค"}]}, "นครนายก": {"total": 2, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "กิตติธเนศวร", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, ไม่ระบุพรรค"}, {"surname": "กิตติเนศวร", "level": "low", "aoj": false, "parties": "กล้าธรรม, ภูมิใจไทย"}]}, "นครพนม": {"total": 3, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "โพธิ์สุ", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "ศรีวรขาน", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "เจริญศรี", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}]}, "นครสวรรค์": {"total": 3, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "นิโรจน์", "level": "medium", "aoj": false, "parties": "พรรคพลังประชารัฐ, ภูมิใจไทย"}, {"surname": "คำประกอบ", "level": "medium", "aoj": false, "parties": "ไม่ระบุพรรค"}, {"surname": "ศิริวันสาณฑ์", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย"}]}, "น่าน": {"total": 2, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "ศรีแก้ว", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "สุปริยศิลป์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "ปทุมธานี": {"total": 2, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "นพขำ", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "หลีนวรัตน์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "ปัตตานี": {"total": 2, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "วาบา", "level": "medium", "aoj": false, "parties": "กล้าธรรม, พรรคประชาธิปัตย์"}, {"surname": "ซูสารอ", "level": "medium", "aoj": false, "parties": "พรรคประชาชาติ"}]}, "ลำพูน": {"total": 1, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "มณีรัตน์", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "สมุทรปราการ": {"total": 3, "high": 0, "medium": 2, "aoj": 0, "families": [{"surname": "กุลเจริญ", "level": "medium", "aoj": false, "parties": "พรรคพลังประชารัฐ, ภูมิใจไทย"}, {"surname": "อัศวเหม", "level": "medium", "aoj": false, "parties": "พรรคพลังประชารัฐ"}, {"surname": "สุทินเผือก", "level": "low", "aoj": false, "parties": "พรรคพลังประชารัฐ"}]}, "สุโขทัย": {"total": 2, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "ลิมปะพันธุ์", "level": "medium", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}, {"surname": "ทองปากน้ำ", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}]}, "หนองคาย": {"total": 2, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "จันทาทอง", "level": "medium", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "ศรีตะบุตร", "level": "low", "aoj": false, "parties": "พลังประชารัฐ"}]}, "แพร่": {"total": 4, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "ศุภศิริ", "level": "medium", "aoj": false, "parties": "ภูมิใจไทย"}, {"surname": "วิวรรธนดิฐกุล", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "เสรีรักษ์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}, {"surname": "เอื้ออภิญญกุล", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "ชลบุรี": {"total": 4, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "เนื่องจำนงค์", "level": "medium", "aoj": false, "parties": "ไม่ระบุพรรค"}, {"surname": "ชมกลิ่น", "level": "low", "aoj": false, "parties": "พรรครวมไทยสร้างชาติ, ภูมิใจไทย"}, {"surname": "สิงห์โตทอง", "level": "low", "aoj": false, "parties": "พรรครวมไทยสร้างชาติ, ภูมิใจไทย"}, {"surname": "ภาวสุทธิ์", "level": "low", "aoj": false, "parties": "ภูมิใจไทย"}]}, "นนทบุรี": {"total": 2, "high": 0, "medium": 1, "aoj": 0, "families": [{"surname": "เรี่ยวแรง", "level": "medium", "aoj": false, "parties": "ไม่ระบุพรรค"}, {"surname": "จันทร์ประสงค์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "ระนอง": {"total": 1, "high": 0, "medium": 0, "aoj": 0, "families": [{"surname": "ฉัตรมาลีรัตน์", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}]}, "พังงา": {"total": 1, "high": 0, "medium": 0, "aoj": 0, "families": [{"surname": "พัฒนกิจวิบูลย์", "level": "low", "aoj": false, "parties": "พรรคพลังประชารัฐ, ภูมิใจไทย"}]}, "ภูเก็ต": {"total": 2, "high": 0, "medium": 0, "aoj": 0, "families": [{"surname": "แสงดี", "level": "low", "aoj": false, "parties": "ประชาชน, พรรคประชาชน"}, {"surname": "ถลาง", "level": "low", "aoj": false, "parties": "พรรคพลังประชารัฐ"}]}, "สมุทรสงคราม": {"total": 1, "high": 0, "medium": 0, "aoj": 0, "families": [{"surname": "ลิขิตอำนวยชัย", "level": "low", "aoj": false, "parties": "ประชาชน, พรรคประชาชน"}]}, "หนองบัวลำภู": {"total": 1, "high": 0, "medium": 0, "aoj": 0, "families": [{"surname": "หัตถสงเคราะห์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}, "อำนาจเจริญ": {"total": 1, "high": 0, "medium": 0, "aoj": 0, "families": [{"surname": "วันทนียกุล", "level": "low", "aoj": false, "parties": "พรรคภูมิใจไทย, ภูมิใจไทย"}]}, "อุตรดิตถ์": {"total": 3, "high": 0, "medium": 0, "aoj": 0, "families": [{"surname": "ศรัณย์เกตุ", "level": "low", "aoj": false, "parties": "พรรคเพื่อชาติ, โอกาสใหม่"}, {"surname": "เล็กอุทัย", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย, เพื่อไทย"}, {"surname": "ศิริวัฒน์", "level": "low", "aoj": false, "parties": "พรรคเพื่อไทย"}]}}, "motions": [{"i": 0, "title": "พรบ.ป้องกันและปราบปรามการฟอกเงิน วาระที่ ๑", "baanyai_cast": 56.2, "others_cast": 61.6, "baanyai_absent": 43.8, "others_absent": 38.4, "gap": 5.4, "is_local": false, "sig": false}, {"i": 1, "title": "พรบ.การขนส่งทางบก", "baanyai_cast": 71.8, "others_cast": 87.2, "baanyai_absent": 28.2, "others_absent": 12.8, "gap": 15.4, "is_local": false, "sig": true}, {"i": 2, "title": "พรบ.สถาปนิก วาระที่ ๑", "baanyai_cast": 70.4, "others_cast": 69.7, "baanyai_absent": 29.6, "others_absent": 30.3, "gap": -0.7, "is_local": false, "sig": false}, {"i": 3, "title": "พรบ.ราชวิทยาลัยจุฬาภรณ์ วาระที่ ๑", "baanyai_cast": 46.6, "others_cast": 58.7, "baanyai_absent": 53.4, "others_absent": 41.3, "gap": 12.1, "is_local": false, "sig": false}, {"i": 4, "title": "พรบ.ระเบียบข้าราชการฝ่ายอัยการ วาระที่ ๑", "baanyai_cast": 53.9, "others_cast": 54.0, "baanyai_absent": 46.1, "others_absent": 46.0, "gap": 0.1, "is_local": false, "sig": false}, {"i": 5, "title": "พรบ.งบประมาณรายจ่ายประจำปีงบประมาณ พ.ศ. 2565", "baanyai_cast": 97.5, "others_cast": 98.1, "baanyai_absent": 2.5, "others_absent": 1.9, "gap": 0.6, "is_local": false, "sig": false}, {"i": 6, "title": "พรบ.การประกอบธุรกิจข้อมูลเครดิต วาระที่ ๑", "baanyai_cast": 56.1, "others_cast": 56.4, "baanyai_absent": 43.9, "others_absent": 43.6, "gap": 0.3, "is_local": false, "sig": false}, {"i": 7, "title": "พรบ.แก้ไขเพิ่มเติมประมวลรัษฎากร", "baanyai_cast": 67.3, "others_cast": 71.3, "baanyai_absent": 32.7, "others_absent": 28.7, "gap": 4.1, "is_local": false, "sig": false}, {"i": 8, "title": "พรบ.ควบคุมเครื่องดื่มแอลกอฮอล์ วาระที่ ๑", "baanyai_cast": 70.0, "others_cast": 84.3, "baanyai_absent": 30.0, "others_absent": 15.7, "gap": 14.3, "is_local": false, "sig": true}, {"i": 9, "title": "พรบ.ระเบียบข้าราชการฝ่ายอัยการ วาระที่ ๓", "baanyai_cast": 57.4, "others_cast": 57.1, "baanyai_absent": 42.6, "others_absent": 42.9, "gap": -0.3, "is_local": false, "sig": false}, {"i": 10, "title": "พรบ.ส่งเสริมการเรียนรู้ พ.ศ. .... วาระที่ ๑", "baanyai_cast": 69.4, "others_cast": 78.7, "baanyai_absent": 30.6, "others_absent": 21.3, "gap": 9.3, "is_local": false, "sig": false}, {"i": 11, "title": "พรบ.แก้ไขเพิ่มเติมประมวลกฎหมายวิธีพิจารณาความอาญา วาระที่ ๑", "baanyai_cast": 76.9, "others_cast": 82.2, "baanyai_absent": 23.1, "others_absent": 17.8, "gap": 5.3, "is_local": false, "sig": false}, {"i": 12, "title": "พรบ.สภาตำบลและองค์การบริหารส่วนตำบล ซึ่งคณะกรรมาธิการวิสามัญ", "baanyai_cast": 54.5, "others_cast": 55.1, "baanyai_absent": 45.5, "others_absent": 44.9, "gap": 0.6, "is_local": true, "sig": false}, {"i": 13, "title": "พรบ.ประกอบรัฐธรรมนูญว่าด้วยพรรคการเมือง ซึ่ง นายวิเชียร ชวลิ", "baanyai_cast": 90.1, "others_cast": 90.7, "baanyai_absent": 9.9, "others_absent": 9.3, "gap": 0.6, "is_local": false, "sig": false}, {"i": 14, "title": "พรบ.การรับรองเพศ คำนำหน้านาม และการคุ้มครองบุคคลผู้มีความหลา", "baanyai_cast": 75.3, "others_cast": 85.4, "baanyai_absent": 24.7, "others_absent": 14.6, "gap": 10.1, "is_local": false, "sig": true}, {"i": 15, "title": "พรบ.งบประมาณรายจ่ายประจำปีงบประมาณ พ.ศ. ๒๕๖๙", "baanyai_cast": 94.6, "others_cast": 98.0, "baanyai_absent": 5.4, "others_absent": 2.0, "gap": 3.3, "is_local": false, "sig": false}, {"i": 16, "title": "พรบ.องค์กรจัดสรรคลื่นความถี่และกำกับการประกอบกิจการวิทยุกระจ", "baanyai_cast": 65.5, "others_cast": 80.1, "baanyai_absent": 34.5, "others_absent": 19.9, "gap": 14.6, "is_local": false, "sig": true}, {"i": 17, "title": "พรบ.ภาษีสรรพสามิต", "baanyai_cast": 68.3, "others_cast": 69.8, "baanyai_absent": 31.7, "others_absent": 30.2, "gap": 1.5, "is_local": false, "sig": false}, {"i": 18, "title": "พรบ.ศาลเยาวชนและครอบครัวและวิธีพิจารณาคดีเยาวชนและครอบครัว ว", "baanyai_cast": 64.2, "others_cast": 62.9, "baanyai_absent": 35.8, "others_absent": 37.1, "gap": -1.3, "is_local": false, "sig": false}, {"i": 19, "title": "พรบ.การขนส่งทางราง พ.ศ. .... วาระที่ ๓", "baanyai_cast": 73.8, "others_cast": 83.9, "baanyai_absent": 26.2, "others_absent": 16.1, "gap": 10.1, "is_local": false, "sig": true}, {"i": 20, "title": "พรบ.การรถไฟฟ้าขนส่งมวลชนแห่งประเทศไทย", "baanyai_cast": 83.2, "others_cast": 91.6, "baanyai_absent": 16.8, "others_absent": 8.4, "gap": 8.4, "is_local": false, "sig": true}, {"i": 21, "title": "พรบ.งบประมาณรายจ่ายประจำปีงบประมาณ พ.ศ. ๒๕๖๘", "baanyai_cast": 94.6, "others_cast": 95.1, "baanyai_absent": 5.4, "others_absent": 4.9, "gap": 0.4, "is_local": false, "sig": false}, {"i": 22, "title": "พรบ.การเลือกตั้งสมาชิกสภาท้องถิ่นหรือผู้บริหารท้องถิ่น ซึ่งค", "baanyai_cast": 46.2, "others_cast": 56.9, "baanyai_absent": 53.8, "others_absent": 43.1, "gap": 10.7, "is_local": true, "sig": false}, {"i": 23, "title": "พรบ.งบประมาณรายจ่ายประจำปีงบประมาณ พ.ศ. ๒๕๖๘", "baanyai_cast": 96.0, "others_cast": 98.0, "baanyai_absent": 4.0, "others_absent": 2.0, "gap": 2.0, "is_local": false, "sig": false}, {"i": 24, "title": "พรบ.วิธีพิจารณาคดียาเสพติด", "baanyai_cast": 61.0, "others_cast": 68.9, "baanyai_absent": 39.0, "others_absent": 31.1, "gap": 7.9, "is_local": false, "sig": false}, {"i": 25, "title": "พรบ.สภานโยบายการอุดมศึกษา วิทยาศาสตร์ วิจัยและนวัตกรรมแห่งชา", "baanyai_cast": 69.1, "others_cast": 84.6, "baanyai_absent": 30.9, "others_absent": 15.4, "gap": 15.5, "is_local": false, "sig": true}, {"i": 26, "title": "พรบ.ตำรวจแห่งชาติ", "baanyai_cast": 66.7, "others_cast": 72.9, "baanyai_absent": 33.3, "others_absent": 27.1, "gap": 6.2, "is_local": false, "sig": false}, {"i": 27, "title": "การพิจารณาให้ความเห็นชอบบุคคลซึ่งสมควรได้รับแต่งตั้งเป็นนายก", "baanyai_cast": 100.0, "others_cast": 99.4, "baanyai_absent": 0.0, "others_absent": 0.6, "gap": -0.6, "is_local": false, "sig": false}, {"i": 28, "title": "พรบ.หอการค้า", "baanyai_cast": 61.0, "others_cast": 66.2, "baanyai_absent": 39.0, "others_absent": 33.8, "gap": 5.3, "is_local": false, "sig": false}, {"i": 29, "title": "พรบ.ควบคุมยุทธภัณฑ์ วาระที่ ๓", "baanyai_cast": 67.3, "others_cast": 64.2, "baanyai_absent": 32.7, "others_absent": 35.8, "gap": -3.1, "is_local": false, "sig": false}, {"i": 30, "title": "พรบ.ยุทธศาสตร์ลำไย พ.ศ. .... วาระที่ ๓", "baanyai_cast": 49.7, "others_cast": 68.4, "baanyai_absent": 50.3, "others_absent": 31.6, "gap": 18.7, "is_local": false, "sig": true}, {"i": 31, "title": "พรบ.มาตรการของฝ่ายบริหารในการป้องกันและปราบปรามการทุจริต", "baanyai_cast": 82.0, "others_cast": 83.4, "baanyai_absent": 18.0, "others_absent": 16.6, "gap": 1.4, "is_local": false, "sig": false}, {"i": 32, "title": "พรบ.กำหนดระยะเวลาดำเนินงานในกระบวนการยุติธรรม พ.ศ. .... วาระ", "baanyai_cast": 78.8, "others_cast": 87.6, "baanyai_absent": 21.2, "others_absent": 12.4, "gap": 8.9, "is_local": false, "sig": false}, {"i": 33, "title": "พรบ.ค่าตอบแทนผู้เสียหาย และค่าทดแทนและค่าใช้จ่ายแก่จำเลยในคด", "baanyai_cast": 49.7, "others_cast": 70.7, "baanyai_absent": 50.3, "others_absent": 29.3, "gap": 21.0, "is_local": false, "sig": true}, {"i": 34, "title": "พรบ.อาหาร วาระที่ ๑", "baanyai_cast": 65.4, "others_cast": 66.1, "baanyai_absent": 34.6, "others_absent": 33.9, "gap": 0.7, "is_local": false, "sig": false}, {"i": 35, "title": "พรบ.ประกอบรัฐธรรมนูญว่าด้วยการป้องกันและปราบปรามการทุจริต", "baanyai_cast": 77.9, "others_cast": 86.6, "baanyai_absent": 22.1, "others_absent": 13.4, "gap": 8.7, "is_local": false, "sig": false}, {"i": 36, "title": "พรบ.กองทุนการออมแห่งชาติ", "baanyai_cast": 68.5, "others_cast": 86.9, "baanyai_absent": 31.5, "others_absent": 13.1, "gap": 18.5, "is_local": false, "sig": true}, {"i": 37, "title": "พรบ.การแข่งขันทางการค้า วาระที่ ๑", "baanyai_cast": 61.4, "others_cast": 74.4, "baanyai_absent": 38.6, "others_absent": 25.6, "gap": 13.0, "is_local": false, "sig": true}, {"i": 38, "title": "พรบ.เทศบาล ซึ่งคณะกรรมาธิการวิสามัญพิจารณาพรบ.องค์การบริหารส", "baanyai_cast": 49.0, "others_cast": 56.3, "baanyai_absent": 51.0, "others_absent": 43.7, "gap": 7.3, "is_local": true, "sig": false}, {"i": 39, "title": "พรบ.ลิขสิทธิ์", "baanyai_cast": 64.8, "others_cast": 65.5, "baanyai_absent": 35.2, "others_absent": 34.5, "gap": 0.7, "is_local": false, "sig": false}, {"i": 40, "title": "พรบ.ประกอบรัฐธรรมนูญว่าด้วยพรรคการเมือง ซึ่ง นายอนันต์ ผลอำน", "baanyai_cast": 89.5, "others_cast": 90.4, "baanyai_absent": 10.5, "others_absent": 9.6, "gap": 0.9, "is_local": false, "sig": false}, {"i": 41, "title": "พรบ.งบประมาณรายจ่ายประจำปีงบประมาณ พ.ศ. 2566", "baanyai_cast": 92.1, "others_cast": 92.3, "baanyai_absent": 7.9, "others_absent": 7.7, "gap": 0.2, "is_local": false, "sig": false}, {"i": 42, "title": "พรบ.การปฏิบัติราชการทางอิเล็กทรอนิกส์ พ.ศ. .... วาระที่ ๓", "baanyai_cast": 46.3, "others_cast": 46.6, "baanyai_absent": 53.7, "others_absent": 53.4, "gap": 0.3, "is_local": false, "sig": false}, {"i": 43, "title": "พรบ.แก้ไขเพิ่มเติมคำสั่งหัวหน้าคณะรักษาความสงบแห่งชาติ ที่ ๑", "baanyai_cast": 54.9, "others_cast": 55.5, "baanyai_absent": 45.1, "others_absent": 44.5, "gap": 0.6, "is_local": false, "sig": false}, {"i": 44, "title": "พรบ.คุ้มครองและส่งเสริมวิถีชีวิตกลุ่มชาติพันธุ์ พ.ศ. ....", "baanyai_cast": 76.0, "others_cast": 86.3, "baanyai_absent": 24.0, "others_absent": 13.7, "gap": 10.3, "is_local": false, "sig": true}, {"i": 45, "title": "พรบ.การอุดมศึกษา", "baanyai_cast": 70.5, "others_cast": 84.3, "baanyai_absent": 29.5, "others_absent": 15.7, "gap": 13.8, "is_local": false, "sig": true}, {"i": 46, "title": "พรบ.มหาวิทยาลัยอุบลราชธานี พ.ศ. ....", "baanyai_cast": 75.8, "others_cast": 83.7, "baanyai_absent": 24.2, "others_absent": 16.3, "gap": 7.8, "is_local": false, "sig": false}, {"i": 47, "title": "พรบ.การรถไฟฟ้าขนส่งมวลชนแห่งประเทศไทย วาระที่ ๓", "baanyai_cast": 75.9, "others_cast": 83.3, "baanyai_absent": 24.1, "others_absent": 16.7, "gap": 7.4, "is_local": false, "sig": false}, {"i": 48, "title": "พรบ.ระเบียบบริหารราชการกระทรวงการอุดมศึกษา วิทยาศาสตร์ วิจัย", "baanyai_cast": 69.8, "others_cast": 85.5, "baanyai_absent": 30.2, "others_absent": 14.5, "gap": 15.7, "is_local": false, "sig": true}, {"i": 49, "title": "พรบ.บริหารจัดการเพื่ออากาศสะอาด พ.ศ. .... วาระที่ ๓", "baanyai_cast": 49.7, "others_cast": 69.3, "baanyai_absent": 50.3, "others_absent": 30.7, "gap": 19.7, "is_local": false, "sig": true}, {"i": 50, "title": "พรบ.แก้ไขเพิ่มเติมประมวลกฎหมายวิธีพิจารณาความแพ่ง", "baanyai_cast": 84.9, "others_cast": 87.9, "baanyai_absent": 15.1, "others_absent": 12.1, "gap": 3.0, "is_local": false, "sig": false}, {"i": 51, "title": "พรบ.ธรรมนูญศาลทหาร วาระที่ ๑", "baanyai_cast": 53.5, "others_cast": 54.2, "baanyai_absent": 46.5, "others_absent": 45.8, "gap": 0.7, "is_local": false, "sig": false}, {"i": 52, "title": "พรบ.ยกเลิกกฎหมายบางฉบับที่หมดความจำเป็นหรือซ้ำซ้อนกับกฎหมายอ", "baanyai_cast": 65.4, "others_cast": 64.1, "baanyai_absent": 34.6, "others_absent": 35.9, "gap": -1.4, "is_local": false, "sig": false}, {"i": 53, "title": "พรบ.การอำนวยความสะดวกในการพิจารณาอนุญาตและการให้บริการแก่ประ", "baanyai_cast": 69.8, "others_cast": 86.9, "baanyai_absent": 30.2, "others_absent": 13.1, "gap": 17.1, "is_local": false, "sig": true}, {"i": 54, "title": "พรบ.งบประมาณรายจ่ายประจำปีงบประมาณ พ.ศ. 2565", "baanyai_cast": 93.3, "others_cast": 93.3, "baanyai_absent": 6.7, "others_absent": 6.7, "gap": 0.0, "is_local": false, "sig": false}, {"i": 55, "title": "พรบ.สร้างเสริมสังคมสันติสุข พ.ศ. .... ซึ่ง นายวิชัย สุดสวาสด", "baanyai_cast": 93.2, "others_cast": 96.5, "baanyai_absent": 6.8, "others_absent": 3.5, "gap": 3.4, "is_local": false, "sig": false}, {"i": 56, "title": "พรบ.แก้ไขเพิ่มเติมประมวลกฎหมายอาญา วาระที่ ๓", "baanyai_cast": 66.4, "others_cast": 77.8, "baanyai_absent": 33.6, "others_absent": 22.2, "gap": 11.4, "is_local": false, "sig": true}, {"i": 57, "title": "พรบ.จัดตั้งศาลภาษีอากรและวิธีพิจารณาคดีภาษีอากร", "baanyai_cast": 71.1, "others_cast": 76.7, "baanyai_absent": 28.9, "others_absent": 23.3, "gap": 5.6, "is_local": false, "sig": false}, {"i": 58, "title": "พรบ.การเลือกตั้งสมาชิกสภาท้องถิ่นหรือผู้บริหารท้องถิ่น วาระท", "baanyai_cast": 43.4, "others_cast": 54.0, "baanyai_absent": 56.6, "others_absent": 46.0, "gap": 10.7, "is_local": true, "sig": false}, {"i": 59, "title": "พรบ.ประกอบรัฐธรรมนูญว่าด้วยพรรคการเมือง ซึ่ง คณะรัฐมนตรี เป็", "baanyai_cast": 90.7, "others_cast": 90.4, "baanyai_absent": 9.3, "others_absent": 9.6, "gap": -0.4, "is_local": false, "sig": false}, {"i": 60, "title": "พรบ.แก้ไขเพิ่มเติมพระราชกำหนดการประมง พ.ศ. ๒๕๕๘ พ.ศ. ....", "baanyai_cast": 74.0, "others_cast": 87.1, "baanyai_absent": 26.0, "others_absent": 12.9, "gap": 13.1, "is_local": false, "sig": true}, {"i": 61, "title": "พรบ.การเดินเรือในน่านน้ำไทย วาระที่ ๓", "baanyai_cast": 54.3, "others_cast": 53.4, "baanyai_absent": 45.7, "others_absent": 46.6, "gap": -0.9, "is_local": false, "sig": false}, {"i": 62, "title": "พรบ.ว่าด้วยการวินิจฉัยชี้ขาดอำนาจหน้าที่ระหว่างศาล", "baanyai_cast": 100.0, "others_cast": 100.0, "baanyai_absent": 0.0, "others_absent": 0.0, "gap": 0.0, "is_local": false, "sig": false}, {"i": 63, "title": "พรบ.ระเบียบข้าราชการครูและบุคลากรทางการศึกษา ซึ่งคณะกรรมาธิก", "baanyai_cast": 38.5, "others_cast": 60.3, "baanyai_absent": 61.5, "others_absent": 39.7, "gap": 21.8, "is_local": false, "sig": true}, {"i": 64, "title": "ร่างข้อบังคับการประชุมสภาผู้แทนราษฎร", "baanyai_cast": 54.5, "others_cast": 55.9, "baanyai_absent": 45.5, "others_absent": 44.1, "gap": 1.4, "is_local": false, "sig": false}, {"i": 65, "title": "พรบ.ส่งเสริมการเรียนรู้ พ.ศ. ....", "baanyai_cast": 47.8, "others_cast": 52.9, "baanyai_absent": 52.2, "others_absent": 47.1, "gap": 5.1, "is_local": false, "sig": false}, {"i": 66, "title": "พรบ.ว่าด้วยการวินิจฉัยชี้ขาดอำนาจหน้าที่ระหว่างศาล", "baanyai_cast": 63.6, "others_cast": 61.4, "baanyai_absent": 36.4, "others_absent": 38.6, "gap": -2.2, "is_local": false, "sig": false}, {"i": 67, "title": "พรบ.กองทุนบำเหน็จบำนาญข้าราชการ มาตรา ๗/๑ แก้ไขมาตรา ๗๐/๘ วร", "baanyai_cast": 46.3, "others_cast": 51.4, "baanyai_absent": 53.7, "others_absent": 48.6, "gap": 5.1, "is_local": false, "sig": false}, {"i": 68, "title": "พรบ.จัดตั้งศาลทรัพย์สินทางปัญญาและการค้าระหว่างประเทศและวิธี", "baanyai_cast": 61.1, "others_cast": 61.6, "baanyai_absent": 38.9, "others_absent": 38.4, "gap": 0.5, "is_local": false, "sig": false}, {"i": 69, "title": "พรบ.ควบคุมเครื่องดื่มแอลกอฮอล์", "baanyai_cast": 62.4, "others_cast": 79.1, "baanyai_absent": 37.6, "others_absent": 20.9, "gap": 16.7, "is_local": false, "sig": true}, {"i": 70, "title": "พรบ.ป้องกันและปราบปรามการฟอกเงิน วาระที่ ๓", "baanyai_cast": 52.4, "others_cast": 55.6, "baanyai_absent": 47.6, "others_absent": 44.4, "gap": 3.1, "is_local": false, "sig": false}, {"i": 71, "title": "พรบ.คู่ชีวิต พ.ศ. .... วาระที่ ๑", "baanyai_cast": 78.7, "others_cast": 88.1, "baanyai_absent": 21.3, "others_absent": 11.9, "gap": 9.4, "is_local": false, "sig": true}, {"i": 72, "title": "พรบ.จัดตั้งศาลแรงงานและวิธีพิจารณาคดีแรงงาน วาระที่ ๑", "baanyai_cast": 62.3, "others_cast": 60.3, "baanyai_absent": 37.7, "others_absent": 39.7, "gap": -2.0, "is_local": false, "sig": false}, {"i": 73, "title": "พรบ.วิชาชีพการสัตวบาล พ.ศ. .... วาระที่ ๓", "baanyai_cast": 61.1, "others_cast": 62.1, "baanyai_absent": 38.9, "others_absent": 37.9, "gap": 0.9, "is_local": false, "sig": false}, {"i": 74, "title": "พรบ.เครื่องสำอาง วาระที่ ๓", "baanyai_cast": 54.3, "others_cast": 52.8, "baanyai_absent": 45.7, "others_absent": 47.2, "gap": -1.5, "is_local": false, "sig": false}, {"i": 75, "title": "พรบ.คุ้มครองพยานในคดีอาญา วาระที่ ๓", "baanyai_cast": 66.0, "others_cast": 57.5, "baanyai_absent": 34.0, "others_absent": 42.5, "gap": -8.6, "is_local": false, "sig": false}, {"i": 76, "title": "พรบ.นิรโทษกรรมแก่บุคคลซึ่งได้กระทำความผิดอันเนื่องมาจากเหตุก", "baanyai_cast": 93.8, "others_cast": 96.5, "baanyai_absent": 6.2, "others_absent": 3.5, "gap": 2.7, "is_local": false, "sig": false}, {"i": 77, "title": "พรบ.นิรโทษกรรมประชาชน พ.ศ. .... ซึ่ง นางสาวพูนสุข พูนสุขเจริ", "baanyai_cast": 95.2, "others_cast": 96.8, "baanyai_absent": 4.8, "others_absent": 3.2, "gap": 1.6, "is_local": false, "sig": false}, {"i": 78, "title": "พรบ.คุ้มครองแรงงาน", "baanyai_cast": 74.7, "others_cast": 88.8, "baanyai_absent": 25.3, "others_absent": 11.2, "gap": 14.1, "is_local": false, "sig": true}, {"i": 79, "title": "พรบ.กัญชา กัญชง พ.ศ. ....", "baanyai_cast": 82.9, "others_cast": 85.1, "baanyai_absent": 17.1, "others_absent": 14.9, "gap": 2.2, "is_local": false, "sig": false}, {"i": 80, "title": "พรบ.ควบคุมยุทธภัณฑ์", "baanyai_cast": 62.4, "others_cast": 60.7, "baanyai_absent": 37.6, "others_absent": 39.3, "gap": -1.7, "is_local": false, "sig": false}, {"i": 81, "title": "พรบ.ประกอบรัฐธรรมนูญว่าด้วยการเลือกตั้งสมาชิกสภาผู้แทนราษฎร ", "baanyai_cast": 88.3, "others_cast": 92.0, "baanyai_absent": 11.7, "others_absent": 8.0, "gap": 3.6, "is_local": false, "sig": false}, {"i": 82, "title": "พรบ.แก้ไขเพิ่มเติมประมวลกฎหมายแพ่งและพาณิชย์ วาระที่ ๑", "baanyai_cast": 76.8, "others_cast": 88.3, "baanyai_absent": 23.2, "others_absent": 11.7, "gap": 11.4, "is_local": false, "sig": true}, {"i": 83, "title": "พรบ.จัดระเบียบทรัพย์สินพระมหากษัตริย์", "baanyai_cast": 90.6, "others_cast": 92.8, "baanyai_absent": 9.4, "others_absent": 7.2, "gap": 2.2, "is_local": false, "sig": false}, {"i": 84, "title": "พรบ.ค่าตอบแทนผู้เสียหาย และค่าทดแทนและค่าใช้จ่ายแก่จำเลยในคด", "baanyai_cast": 65.8, "others_cast": 84.0, "baanyai_absent": 34.2, "others_absent": 16.0, "gap": 18.2, "is_local": false, "sig": true}, {"i": 85, "title": "พรบ.สร้างเสริมสังคมสันติสุข พ.ศ. .... วาระที่ ๓", "baanyai_cast": 43.4, "others_cast": 63.0, "baanyai_absent": 56.6, "others_absent": 37.0, "gap": 19.7, "is_local": false, "sig": true}, {"i": 86, "title": "พรบ.ว่าด้วยการเวนคืนและการได้มาซึ่งอสังหาริมทรัพย์", "baanyai_cast": 61.7, "others_cast": 78.7, "baanyai_absent": 38.3, "others_absent": 21.3, "gap": 17.0, "is_local": true, "sig": true}, {"i": 87, "title": "พรบ.บริษัทมหาชนจำกัด วาระที่ ๑", "baanyai_cast": 60.5, "others_cast": 62.2, "baanyai_absent": 39.5, "others_absent": 37.8, "gap": 1.7, "is_local": false, "sig": false}, {"i": 88, "title": "พรบ.ว่าด้วยการปรับเป็นพินัย พ.ศ. .... วาระที่ ๓", "baanyai_cast": 48.2, "others_cast": 46.6, "baanyai_absent": 51.8, "others_absent": 53.4, "gap": -1.6, "is_local": false, "sig": false}, {"i": 89, "title": "พรบ.การรายงานและเปิดเผยข้อมูลการปล่อยและเคลื่อนย้ายสารมลพิษ ", "baanyai_cast": 89.7, "others_cast": 88.8, "baanyai_absent": 10.3, "others_absent": 11.2, "gap": -0.9, "is_local": false, "sig": false}, {"i": 90, "title": "พรบ.โคนมและผลิตภัณฑ์นม", "baanyai_cast": 60.4, "others_cast": 79.9, "baanyai_absent": 39.6, "others_absent": 20.1, "gap": 19.5, "is_local": false, "sig": true}, {"i": 91, "title": "พรบ.จัดระเบียบทรัพย์สินพระมหากษัตริย์", "baanyai_cast": 87.2, "others_cast": 93.4, "baanyai_absent": 12.8, "others_absent": 6.6, "gap": 6.1, "is_local": false, "sig": false}, {"i": 92, "title": "พรบ.จัดตั้งศาลภาษีอากรและวิธีพิจารณาคดีภาษีอากร วาระที่ ๑", "baanyai_cast": 45.1, "others_cast": 52.3, "baanyai_absent": 54.9, "others_absent": 47.7, "gap": 7.3, "is_local": false, "sig": false}, {"i": 93, "title": "พรบ.ลักษณะปกครองท้องที่", "baanyai_cast": 71.1, "others_cast": 80.8, "baanyai_absent": 28.9, "others_absent": 19.2, "gap": 9.7, "is_local": false, "sig": false}, {"i": 94, "title": "พรบ.ควบคุมเครื่องดื่มแอลกอฮอล์", "baanyai_cast": 61.7, "others_cast": 77.3, "baanyai_absent": 38.3, "others_absent": 22.7, "gap": 15.6, "is_local": false, "sig": true}, {"i": 95, "title": "พรบ.ล้มละลาย วาระที่ ๑", "baanyai_cast": 64.4, "others_cast": 61.8, "baanyai_absent": 35.6, "others_absent": 38.2, "gap": -2.7, "is_local": false, "sig": false}, {"i": 96, "title": "พรบ.การอำนวยความสะดวกในการพิจารณาอนุญาตและการให้บริการแก่ประ", "baanyai_cast": 69.7, "others_cast": 80.1, "baanyai_absent": 30.3, "others_absent": 19.9, "gap": 10.5, "is_local": false, "sig": true}, {"i": 97, "title": "พรบ.ประกอบรัฐธรรมนูญว่าด้วยการเลือกตั้งสมาชิกสภาผู้แทนราษฎร ", "baanyai_cast": 86.2, "others_cast": 91.2, "baanyai_absent": 13.8, "others_absent": 8.8, "gap": 4.9, "is_local": false, "sig": false}, {"i": 98, "title": "พรบ.เงินเดือนและเงินประจำตำแหน่งของข้าราชการพลเรือนกลาโหม พ.", "baanyai_cast": 63.1, "others_cast": 84.3, "baanyai_absent": 36.9, "others_absent": 15.7, "gap": 21.2, "is_local": false, "sig": true}, {"i": 99, "title": "พรบ.ล้มละลาย วาระที่ ๓", "baanyai_cast": 55.2, "others_cast": 69.0, "baanyai_absent": 44.8, "others_absent": 31.0, "gap": 13.7, "is_local": false, "sig": true}, {"i": 100, "title": "พรบ.การบริหารจัดการระบบตั๋วร่วม พ.ศ. .... วาระที่ ๓", "baanyai_cast": 71.7, "others_cast": 81.3, "baanyai_absent": 28.3, "others_absent": 18.7, "gap": 9.5, "is_local": false, "sig": false}, {"i": 101, "title": "พรบ.วิธีพิจารณาคดีทุจริตและประพฤติมิชอบ วาระที่ ๑", "baanyai_cast": 47.6, "others_cast": 63.9, "baanyai_absent": 52.4, "others_absent": 36.1, "gap": 16.3, "is_local": false, "sig": true}, {"i": 102, "title": "พรบ.ยกเลิกคำสั่งหัวหน้าคณะรักษาความสงบแห่งชาติ ที่ ๑๔/๒๕๕๙ เ", "baanyai_cast": 80.7, "others_cast": 86.0, "baanyai_absent": 19.3, "others_absent": 14.0, "gap": 5.3, "is_local": false, "sig": false}, {"i": 103, "title": "พรบ.จัดตั้งศาลทรัพย์สินทางปัญญาและการค้าระหว่างประเทศและวิธี", "baanyai_cast": 74.1, "others_cast": 70.5, "baanyai_absent": 25.9, "others_absent": 29.5, "gap": -3.6, "is_local": false, "sig": false}, {"i": 104, "title": "พรบ.ระเบียบบริหารงานบุคคลส่วนท้องถิ่น วาระที่ ๑", "baanyai_cast": 61.5, "others_cast": 66.7, "baanyai_absent": 38.5, "others_absent": 33.3, "gap": 5.1, "is_local": true, "sig": false}, {"i": 105, "title": "พรบ.กองทุนบำเหน็จบำนาญข้าราชการ วาระที่ ๑", "baanyai_cast": 74.1, "others_cast": 67.8, "baanyai_absent": 25.9, "others_absent": 32.2, "gap": -6.2, "is_local": false, "sig": false}, {"i": 106, "title": "พรบ.การจัดทำประมวลกฎหมายและกฎเพื่อให้ประชาชนเข้าถึงได้โดยสะด", "baanyai_cast": 41.6, "others_cast": 54.5, "baanyai_absent": 58.4, "others_absent": 45.5, "gap": 12.9, "is_local": false, "sig": true}, {"i": 107, "title": "พรบ.ว่าด้วยการเวนคืนและการได้มาซึ่งอสังหาริมทรัพย์ วาระที่ ๓", "baanyai_cast": 37.1, "others_cast": 60.7, "baanyai_absent": 62.9, "others_absent": 39.3, "gap": 23.7, "is_local": true, "sig": true}, {"i": 108, "title": "พรบ.สถาบันวิจัยวิทยาศาสตร์และเทคโนโลยีแห่งประเทศไทย", "baanyai_cast": 75.8, "others_cast": 84.3, "baanyai_absent": 24.2, "others_absent": 15.7, "gap": 8.4, "is_local": false, "sig": false}, {"i": 109, "title": "พรบ.การขนส่งทางราง พ.ศ. ....", "baanyai_cast": 74.5, "others_cast": 85.5, "baanyai_absent": 25.5, "others_absent": 14.5, "gap": 11.0, "is_local": false, "sig": true}, {"i": 110, "title": "พรบ.วินัยการเงินการคลังของรัฐ", "baanyai_cast": 73.2, "others_cast": 82.2, "baanyai_absent": 26.8, "others_absent": 17.8, "gap": 9.1, "is_local": false, "sig": false}, {"i": 111, "title": "พรบ.เทศบาล วาระที่ ๑", "baanyai_cast": 43.4, "others_cast": 54.0, "baanyai_absent": 56.6, "others_absent": 46.0, "gap": 10.7, "is_local": true, "sig": false}, {"i": 112, "title": "พรบ.ราชวิทยาลัยจุฬาภรณ์ วาระที่ ๓", "baanyai_cast": 43.7, "others_cast": 53.4, "baanyai_absent": 56.3, "others_absent": 46.6, "gap": 9.8, "is_local": false, "sig": false}, {"i": 113, "title": "พรบ.วัตถุอันตราย", "baanyai_cast": 64.8, "others_cast": 68.5, "baanyai_absent": 35.2, "others_absent": 31.5, "gap": 3.7, "is_local": false, "sig": false}, {"i": 114, "title": "พรบ.ศาลเยาวชนและครอบครัวและวิธีพิจารณาคดีเยาวชนและครอบครัว ซ", "baanyai_cast": 73.9, "others_cast": 64.7, "baanyai_absent": 26.1, "others_absent": 35.3, "gap": -9.2, "is_local": false, "sig": false}, {"i": 115, "title": "พรบ.คู่ชีวิต พ.ศ. .... วาระที่ ๑", "baanyai_cast": 75.6, "others_cast": 88.7, "baanyai_absent": 24.4, "others_absent": 11.3, "gap": 13.1, "is_local": false, "sig": true}, {"i": 116, "title": "พรบ.คุ้มครองแรงงาน วาระที่ ๑", "baanyai_cast": 57.3, "others_cast": 73.1, "baanyai_absent": 42.7, "others_absent": 26.9, "gap": 15.7, "is_local": false, "sig": true}, {"i": 117, "title": "พรบ.การประกอบธุรกิจข้อมูลเครดิต วาระที่ ๓", "baanyai_cast": 63.6, "others_cast": 66.6, "baanyai_absent": 36.4, "others_absent": 33.4, "gap": 3.0, "is_local": false, "sig": false}, {"i": 118, "title": "พรบ.ระเบียบบริหารงานบุคคลส่วนท้องถิ่น วาระที่ ๓", "baanyai_cast": 39.9, "others_cast": 54.0, "baanyai_absent": 60.1, "others_absent": 46.0, "gap": 14.1, "is_local": true, "sig": true}, {"i": 119, "title": "พรบ.ลิขสิทธิ์ วาระที่ ๓", "baanyai_cast": 59.3, "others_cast": 59.9, "baanyai_absent": 40.7, "others_absent": 40.1, "gap": 0.7, "is_local": false, "sig": false}, {"i": 120, "title": "พรบ.บริษัทมหาชนจำกัด วาระที่ ๓", "baanyai_cast": 63.6, "others_cast": 62.5, "baanyai_absent": 36.4, "others_absent": 37.5, "gap": -1.1, "is_local": false, "sig": false}, {"i": 121, "title": "การพิจารณาพรบ.คุ้มครองแรงงาน นายเซีย จำปาทอง กับคณะ เป็นผู้เ", "baanyai_cast": 74.0, "others_cast": 83.1, "baanyai_absent": 26.0, "others_absent": 16.9, "gap": 9.1, "is_local": false, "sig": false}, {"i": 122, "title": "พรบ.ล้มละลาย", "baanyai_cast": 66.4, "others_cast": 81.7, "baanyai_absent": 33.6, "others_absent": 18.3, "gap": 15.2, "is_local": false, "sig": true}, {"i": 123, "title": "พรบ.การบริหารจัดการระบบตั๋วร่วม พ.ศ. ....", "baanyai_cast": 61.7, "others_cast": 80.2, "baanyai_absent": 38.3, "others_absent": 19.8, "gap": 18.5, "is_local": false, "sig": true}, {"i": 124, "title": "พรบ.ระเบียบข้าราชการฝ่ายตุลาการศาลยุติธรรม วาระที่ ๓", "baanyai_cast": 67.7, "others_cast": 63.7, "baanyai_absent": 32.3, "others_absent": 36.3, "gap": -4.0, "is_local": false, "sig": false}, {"i": 125, "title": "พรบ.ยกเลิกประกาศคณะรักษาความสงบแห่งชาติและคำสั่งหัวหน้าคณะรั", "baanyai_cast": 76.1, "others_cast": 84.6, "baanyai_absent": 23.9, "others_absent": 15.4, "gap": 8.5, "is_local": false, "sig": false}, {"i": 126, "title": "พรบ.การท่าเรือแห่งประเทศไทย วาระที่ ๓", "baanyai_cast": 72.4, "others_cast": 79.0, "baanyai_absent": 27.6, "others_absent": 21.0, "gap": 6.5, "is_local": false, "sig": false}, {"i": 127, "title": "พรบ.ประกอบรัฐธรรมนูญว่าด้วยพรรคการเมือง ซึ่ง นายชลน่าน ศรีแก", "baanyai_cast": 90.7, "others_cast": 90.4, "baanyai_absent": 9.3, "others_absent": 9.6, "gap": -0.4, "is_local": false, "sig": false}, {"i": 128, "title": "พรบ.การท่าเรือแห่งประเทศไทย", "baanyai_cast": 61.1, "others_cast": 79.7, "baanyai_absent": 38.9, "others_absent": 20.3, "gap": 18.6, "is_local": false, "sig": true}, {"i": 129, "title": "พรบ.เครื่องราชอิสริยาภรณ์จุลจอมเกล้า วาระที่ ๑", "baanyai_cast": 71.6, "others_cast": 64.0, "baanyai_absent": 28.4, "others_absent": 36.0, "gap": -7.6, "is_local": false, "sig": false}, {"i": 130, "title": "พรบ.ภาษีสรรพสามิต วาระที่ ๓ การลงมติครั้งที่ ๑", "baanyai_cast": 76.1, "others_cast": 77.8, "baanyai_absent": 23.9, "others_absent": 22.2, "gap": 1.7, "is_local": false, "sig": false}, {"i": 131, "title": "พรบ.ป้องกันและปราบปรามการสนับสนุนทางการเงินแก่การก่อการร้ายแ", "baanyai_cast": 78.7, "others_cast": 85.4, "baanyai_absent": 21.3, "others_absent": 14.6, "gap": 6.8, "is_local": false, "sig": false}, {"i": 132, "title": "พรบ.การเข้าชื่อเสนอข้อบัญญัติท้องถิ่น", "baanyai_cast": 63.0, "others_cast": 63.2, "baanyai_absent": 37.0, "others_absent": 36.8, "gap": 0.2, "is_local": true, "sig": false}, {"i": 133, "title": "พรบ.ยกเลิกประกาศคณะรักษาความสงบแห่งชาติและคำสั่งหัวหน้าคณะรั", "baanyai_cast": 71.9, "others_cast": 85.9, "baanyai_absent": 28.1, "others_absent": 14.1, "gap": 14.0, "is_local": false, "sig": true}, {"i": 134, "title": "พรบ.องค์การบริหารส่วนจังหวัด วาระที่ ๓", "baanyai_cast": 57.3, "others_cast": 67.4, "baanyai_absent": 42.7, "others_absent": 32.6, "gap": 10.1, "is_local": false, "sig": false}, {"i": 135, "title": "พรบ.คุ้มครองและส่งเสริมวิถีชีวิตกลุ่มชาติพันธุ์ พ.ศ. ....", "baanyai_cast": 72.5, "others_cast": 84.3, "baanyai_absent": 27.5, "others_absent": 15.7, "gap": 11.8, "is_local": false, "sig": true}, {"i": 136, "title": "พรบ.เครื่องราชอิสริยาภรณ์จุลจอมเกล้า วาระที่ ๓", "baanyai_cast": 72.2, "others_cast": 67.3, "baanyai_absent": 27.8, "others_absent": 32.7, "gap": -4.9, "is_local": false, "sig": false}, {"i": 137, "title": "พรบ.ว่าด้วยการปรับเป็นพินัย พ.ศ. …. วาระที่ ๑", "baanyai_cast": 70.4, "others_cast": 82.3, "baanyai_absent": 29.6, "others_absent": 17.7, "gap": 11.9, "is_local": false, "sig": true}, {"i": 138, "title": "ร่างข้อบังคับการประชุมสภาผู้แทนราษฎร วาระที่ ๑", "baanyai_cast": 65.8, "others_cast": 77.7, "baanyai_absent": 34.2, "others_absent": 22.3, "gap": 11.9, "is_local": false, "sig": true}, {"i": 139, "title": "พรบ.ระเบียบบริหารงานบุคคลส่วนท้องถิ่น", "baanyai_cast": 66.0, "others_cast": 76.0, "baanyai_absent": 34.0, "others_absent": 24.0, "gap": 10.0, "is_local": true, "sig": false}, {"i": 140, "title": "พรบ.การเลือกตั้งสมาชิกสภาท้องถิ่นหรือผู้บริหารท้องถิ่น", "baanyai_cast": 54.3, "others_cast": 54.4, "baanyai_absent": 45.7, "others_absent": 45.6, "gap": 0.1, "is_local": true, "sig": false}, {"i": 141, "title": "การพิจารณาพรบ.ภาษีสรรพสามิต", "baanyai_cast": 65.8, "others_cast": 81.1, "baanyai_absent": 34.2, "others_absent": 18.9, "gap": 15.3, "is_local": false, "sig": true}, {"i": 142, "title": "พรบ.ว่าด้วยการเวนคืนและการได้มาซึ่งอสังหาริมทรัพย์ วาระที่ ๑", "baanyai_cast": 54.5, "others_cast": 60.8, "baanyai_absent": 45.5, "others_absent": 39.2, "gap": 6.3, "is_local": true, "sig": false}, {"i": 143, "title": "พรบ.คุ้มครองแรงงาน วาระที่ ๑", "baanyai_cast": 58.6, "others_cast": 64.1, "baanyai_absent": 41.4, "others_absent": 35.9, "gap": 5.4, "is_local": false, "sig": false}, {"i": 144, "title": "พรบ.พืชกระท่อม พ.ศ. .... วาระที่ ๓", "baanyai_cast": 56.7, "others_cast": 59.7, "baanyai_absent": 43.3, "others_absent": 40.3, "gap": 3.0, "is_local": false, "sig": false}, {"i": 145, "title": "พรบ.การจัดสรรที่ดิน", "baanyai_cast": 65.1, "others_cast": 86.9, "baanyai_absent": 34.9, "others_absent": 13.1, "gap": 21.8, "is_local": true, "sig": true}, {"i": 146, "title": "พรบ.แก้ไขเพิ่มเติมพระราชกำหนดการให้ความช่วยเหลือทางการเงินแก", "baanyai_cast": 53.7, "others_cast": 57.3, "baanyai_absent": 46.3, "others_absent": 42.7, "gap": 3.6, "is_local": false, "sig": false}, {"i": 147, "title": "พรบ.เครื่องสำอาง วาระที่ ๑", "baanyai_cast": 69.8, "others_cast": 65.7, "baanyai_absent": 30.2, "others_absent": 34.3, "gap": -4.1, "is_local": false, "sig": false}, {"i": 148, "title": "พรบ.แก้ไขเพิ่มเติมประมวลกฎหมายที่ดิน", "baanyai_cast": 61.7, "others_cast": 85.5, "baanyai_absent": 38.3, "others_absent": 14.5, "gap": 23.7, "is_local": true, "sig": true}, {"i": 149, "title": "พรบ.แก้ไขเพิ่มเติมพระราชกำหนดให้อำนาจกระทรวงการคลังกู้เงินเพ", "baanyai_cast": 54.6, "others_cast": 56.1, "baanyai_absent": 45.4, "others_absent": 43.9, "gap": 1.5, "is_local": false, "sig": false}, {"i": 150, "title": "พรบ.จราจรทางบก", "baanyai_cast": 68.1, "others_cast": 64.4, "baanyai_absent": 31.9, "others_absent": 35.6, "gap": -3.7, "is_local": false, "sig": false}, {"i": 151, "title": "พรบ.องค์การบริหารส่วนจังหวัด วาระที่ ๑", "baanyai_cast": 45.5, "others_cast": 57.8, "baanyai_absent": 54.5, "others_absent": 42.2, "gap": 12.3, "is_local": false, "sig": false}, {"i": 152, "title": "๑. พรบ.ว่าด้วยการออกเสียงประชามติ", "baanyai_cast": 85.3, "others_cast": 92.6, "baanyai_absent": 14.7, "others_absent": 7.4, "gap": 7.2, "is_local": false, "sig": false}, {"i": 153, "title": "พรบ.ธรรมนูญศาลทหาร วาระที่ ๑", "baanyai_cast": 51.0, "others_cast": 71.3, "baanyai_absent": 49.0, "others_absent": 28.7, "gap": 20.3, "is_local": false, "sig": true}, {"i": 154, "title": "พรบ.งบประมาณรายจ่ายประจำปีงบประมาณ พ.ศ. 2563", "baanyai_cast": 100.0, "others_cast": 99.7, "baanyai_absent": 0.0, "others_absent": 0.3, "gap": -0.3, "is_local": false, "sig": false}, {"i": 155, "title": "พรบ.ตำรวจแห่งชาติ พ.ศ. .... วาระที่ ๓", "baanyai_cast": 73.4, "others_cast": 79.8, "baanyai_absent": 26.6, "others_absent": 20.2, "gap": 6.4, "is_local": false, "sig": false}, {"i": 156, "title": "พรบ.มาตรการป้องกันการกระทำความผิดซ้ำในความผิดเกี่ยวกับเพศหรื", "baanyai_cast": 53.1, "others_cast": 61.7, "baanyai_absent": 46.9, "others_absent": 38.3, "gap": 8.6, "is_local": false, "sig": false}, {"i": 157, "title": "พรบ.โรงงาน วาระที่ ๑", "baanyai_cast": 78.6, "others_cast": 87.9, "baanyai_absent": 21.4, "others_absent": 12.1, "gap": 9.3, "is_local": false, "sig": true}, {"i": 158, "title": "พรบ.ป้องกันและปราบปรามการทรมานและการกระทำให้บุคคลสูญหาย พ.ศ.", "baanyai_cast": 68.3, "others_cast": 78.0, "baanyai_absent": 31.7, "others_absent": 22.0, "gap": 9.7, "is_local": false, "sig": false}, {"i": 159, "title": "พรบ.ประกอบรัฐธรรมนูญว่าด้วยพรรคการเมือง ซึ่ง นายพิธา ลิ้มเจร", "baanyai_cast": 88.9, "others_cast": 90.1, "baanyai_absent": 11.1, "others_absent": 9.9, "gap": 1.2, "is_local": false, "sig": false}, {"i": 160, "title": "พรบ.เงินเดือนและเงินประจำตำแหน่งของข้าราชการพลเรือนกลาโหม พ.", "baanyai_cast": 65.8, "others_cast": 82.8, "baanyai_absent": 34.2, "others_absent": 17.2, "gap": 17.1, "is_local": false, "sig": true}, {"i": 161, "title": "การพิจารณาพรบ.ประกอบรัฐธรรมนูญว่าด้วยการป้องกันและปราบปรามกา", "baanyai_cast": 71.1, "others_cast": 85.2, "baanyai_absent": 28.9, "others_absent": 14.8, "gap": 14.0, "is_local": false, "sig": true}, {"i": 162, "title": "พรบ.การบริหารราชการในสถานการณ์ฉุกเฉิน พ.ศ. ....", "baanyai_cast": 50.3, "others_cast": 51.0, "baanyai_absent": 49.7, "others_absent": 49.0, "gap": 0.7, "is_local": false, "sig": false}, {"i": 163, "title": "พรบ.แก้ไขเพิ่มเติมพระราชกำหนดการรักษาเสถียรภาพของระบบการเงิน", "baanyai_cast": 54.3, "others_cast": 56.5, "baanyai_absent": 45.7, "others_absent": 43.5, "gap": 2.2, "is_local": false, "sig": false}, {"i": 164, "title": "พรบ.งบประมาณรายจ่ายประจำปีงบประมาณ พ.ศ. ๒๕๖๗", "baanyai_cast": 94.7, "others_cast": 92.3, "baanyai_absent": 5.3, "others_absent": 7.7, "gap": -2.4, "is_local": false, "sig": false}, {"i": 165, "title": "พรบ.แก้ไขเพิ่มเติมประมวลกฎหมายอาญา วาระที่ ๓", "baanyai_cast": 65.4, "others_cast": 67.1, "baanyai_absent": 34.6, "others_absent": 32.9, "gap": 1.7, "is_local": false, "sig": false}, {"i": 166, "title": "พรบ.โคนมและผลิตภัณฑ์นม วาระที่ ๓", "baanyai_cast": 42.7, "others_cast": 63.6, "baanyai_absent": 57.3, "others_absent": 36.4, "gap": 21.0, "is_local": false, "sig": true}, {"i": 167, "title": "พรบ.ระเบียบข้าราชการฝ่ายตุลาการศาลยุติธรรม วาระที่ ๑", "baanyai_cast": 64.2, "others_cast": 61.4, "baanyai_absent": 35.8, "others_absent": 38.6, "gap": -2.8, "is_local": false, "sig": false}, {"i": 168, "title": "พรบ.ธนาคารแห่งประเทศไทย", "baanyai_cast": 54.3, "others_cast": 52.6, "baanyai_absent": 45.7, "others_absent": 47.4, "gap": -1.7, "is_local": false, "sig": false}, {"i": 169, "title": "พรบ.กองทุนเงินให้กู้ยืมเพื่อการศึกษา (ฉบับที่ ..) พ.ศ. …. วา", "baanyai_cast": 74.4, "others_cast": 72.7, "baanyai_absent": 25.6, "others_absent": 27.3, "gap": -1.6, "is_local": false, "sig": false}, {"i": 170, "title": "พรบ.อาสาสมัครสาธารณสุขประจำหมู่บ้าน พ.ศ. .... วาระที่ ๑", "baanyai_cast": 49.0, "others_cast": 68.3, "baanyai_absent": 51.0, "others_absent": 31.7, "gap": 19.3, "is_local": false, "sig": true}, {"i": 171, "title": "พรบ.กองทุนการออมแห่งชาติ", "baanyai_cast": 76.0, "others_cast": 92.2, "baanyai_absent": 24.0, "others_absent": 7.8, "gap": 16.2, "is_local": false, "sig": true}, {"i": 172, "title": "พรบ.สร้างเสริมสังคมสันติสุข พ.ศ. .... ซึ่ง นายอนุทิน ชาญวีรก", "baanyai_cast": 93.8, "others_cast": 93.4, "baanyai_absent": 6.2, "others_absent": 6.6, "gap": -0.5, "is_local": false, "sig": false}, {"i": 173, "title": "พรบ.งบประมาณรายจ่ายประจำปีงบประมาณ พ.ศ. ๒๕๖๙ วาระที่ ๓", "baanyai_cast": 98.6, "others_cast": 99.4, "baanyai_absent": 1.4, "others_absent": 0.6, "gap": 0.8, "is_local": false, "sig": false}, {"i": 174, "title": "พิจารณาพรบ.การเลือกตั้งสมาชิกสภาท้องถิ่นหรือผู้บริหารท้องถิ่", "baanyai_cast": 55.1, "others_cast": 61.5, "baanyai_absent": 44.9, "others_absent": 38.5, "gap": 6.4, "is_local": true, "sig": false}, {"i": 175, "title": "พรบ.การจัดสรรที่ดิน", "baanyai_cast": 65.8, "others_cast": 84.0, "baanyai_absent": 34.2, "others_absent": 16.0, "gap": 18.2, "is_local": true, "sig": true}, {"i": 176, "title": "พรบ.สภาตำบลและองค์การบริหารส่วนตำบล วาระที่ ๑", "baanyai_cast": 43.4, "others_cast": 54.0, "baanyai_absent": 56.6, "others_absent": 46.0, "gap": 10.7, "is_local": true, "sig": false}, {"i": 177, "title": "พรบ.ยกเลิกบทบัญญัติแห่งกฎหมายที่กำหนดความผิดมูลฐานตามกฎหมายว", "baanyai_cast": 72.5, "others_cast": 87.2, "baanyai_absent": 27.5, "others_absent": 12.8, "gap": 14.7, "is_local": false, "sig": true}, {"i": 178, "title": "พรบ.ยาเสพติดให้โทษ", "baanyai_cast": 69.2, "others_cast": 78.8, "baanyai_absent": 30.8, "others_absent": 21.2, "gap": 9.6, "is_local": false, "sig": false}, {"i": 179, "title": "พรบ.ยกเลิกประกาศและคำสั่งคณะรักษาความสงบแห่งชาติและคำสั่งหัว", "baanyai_cast": 77.3, "others_cast": 86.9, "baanyai_absent": 22.7, "others_absent": 13.1, "gap": 9.6, "is_local": false, "sig": true}, {"i": 180, "title": "พรบ.แก้ไขเพิ่มเติมประมวลกฎหมายแพ่งและพาณิชย์", "baanyai_cast": 67.8, "others_cast": 84.9, "baanyai_absent": 32.2, "others_absent": 15.1, "gap": 17.1, "is_local": false, "sig": true}, {"i": 181, "title": "ร่างข้อบังคับการประชุมสภาผู้แทนราษฎร ซึ่งคณะกรรรมาธิการวิสาม", "baanyai_cast": 64.4, "others_cast": 68.3, "baanyai_absent": 35.6, "others_absent": 31.7, "gap": 3.9, "is_local": false, "sig": false}, {"i": 182, "title": "พรบ.วิธีการงบประมาณ วาระที่ ๑", "baanyai_cast": 63.6, "others_cast": 69.6, "baanyai_absent": 36.4, "others_absent": 30.4, "gap": 6.0, "is_local": false, "sig": false}, {"i": 183, "title": "ร่างข้อบังคับการประชุมรัฐสภา", "baanyai_cast": 75.8, "others_cast": 88.4, "baanyai_absent": 24.2, "others_absent": 11.6, "gap": 12.5, "is_local": false, "sig": true}, {"i": 184, "title": "ญัตติด่วน เรื่อง ขอให้รัฐสภามีมติขอให้ศาลรัฐธรรมนูญ พิจารณาว", "baanyai_cast": 77.9, "others_cast": 86.6, "baanyai_absent": 22.1, "others_absent": 13.4, "gap": 8.7, "is_local": false, "sig": false}, {"i": 185, "title": "พรบ.การเข้าชื่อเสนอข้อบัญญัติท้องถิ่น พ.ศ. .... วาระที่ ๓", "baanyai_cast": 60.1, "others_cast": 57.0, "baanyai_absent": 39.9, "others_absent": 43.0, "gap": -3.1, "is_local": true, "sig": false}, {"i": 186, "title": "พรบ.การประกอบกิจการกระจายเสียงและกิจการโทรทัศน์ วาระที่ ๑", "baanyai_cast": 69.7, "others_cast": 80.1, "baanyai_absent": 30.3, "others_absent": 19.9, "gap": 10.5, "is_local": false, "sig": true}, {"i": 187, "title": "พรบ.ลักษณะปกครองท้องที่ วาระที่ ๓", "baanyai_cast": 66.4, "others_cast": 75.2, "baanyai_absent": 33.6, "others_absent": 24.8, "gap": 8.8, "is_local": false, "sig": false}, {"i": 188, "title": "พรบ.ป้องกันและปราบปรามการฟอกเงิน", "baanyai_cast": 73.2, "others_cast": 87.2, "baanyai_absent": 26.8, "others_absent": 12.8, "gap": 14.1, "is_local": false, "sig": true}, {"i": 189, "title": "พรบ.การส่งเสริมวิทยาศาสตร์ การวิจัยและนวัตกรรม ซึ่งคณะกรรมาธ", "baanyai_cast": 69.8, "others_cast": 85.5, "baanyai_absent": 30.2, "others_absent": 14.5, "gap": 15.7, "is_local": false, "sig": true}, {"i": 190, "title": "พรบ.การเข้าชื่อเสนอกฎหมาย", "baanyai_cast": 61.8, "others_cast": 67.3, "baanyai_absent": 38.2, "others_absent": 32.7, "gap": 5.5, "is_local": false, "sig": false}, {"i": 191, "title": "พรบ.แก้ไขเพิ่มเติมประมวลกฎหมายแพ่งและพาณิชย์ วาระที่ ๑", "baanyai_cast": 79.3, "others_cast": 87.5, "baanyai_absent": 20.7, "others_absent": 12.5, "gap": 8.2, "is_local": false, "sig": false}, {"i": 192, "title": "พรบ.มหาวิทยาลัยนเรศวร พ.ศ. .... วาระที่ ๑", "baanyai_cast": 53.0, "others_cast": 53.7, "baanyai_absent": 47.0, "others_absent": 46.3, "gap": 0.7, "is_local": false, "sig": false}, {"i": 193, "title": "พรบ.ประกอบรัฐธรรมนูญว่าด้วยการเลือกตั้งสมาชิกสภาผู้แทนราษฎร ", "baanyai_cast": 86.2, "others_cast": 91.4, "baanyai_absent": 13.8, "others_absent": 8.6, "gap": 5.2, "is_local": false, "sig": false}, {"i": 194, "title": "พรบ.ส่งเสริมการใช้ประโยชน์ผลงานวิจัยและนวัตกรรม", "baanyai_cast": 64.0, "others_cast": 64.3, "baanyai_absent": 36.0, "others_absent": 35.7, "gap": 0.3, "is_local": false, "sig": false}, {"i": 195, "title": "พรบ.การจัดสรรที่ดิน", "baanyai_cast": 69.1, "others_cast": 81.1, "baanyai_absent": 30.9, "others_absent": 18.9, "gap": 12.0, "is_local": true, "sig": true}, {"i": 196, "title": "พรบ.ประกอบรัฐธรรมนูญว่าด้วยการเลือกตั้งสมาชิกสภาผู้แทนราษฎร ", "baanyai_cast": 88.6, "others_cast": 90.1, "baanyai_absent": 11.4, "others_absent": 9.9, "gap": 1.5, "is_local": false, "sig": false}, {"i": 197, "title": "พรบ.ยาเสพติดให้โทษ", "baanyai_cast": 66.7, "others_cast": 67.6, "baanyai_absent": 33.3, "others_absent": 32.4, "gap": 0.9, "is_local": false, "sig": false}, {"i": 198, "title": "พรบ.ภาษีสรรพสามิต", "baanyai_cast": 73.2, "others_cast": 89.0, "baanyai_absent": 26.8, "others_absent": 11.0, "gap": 15.8, "is_local": false, "sig": true}, {"i": 199, "title": "พรบ.มหาวิทยาลัยอุบลราชธานี พ.ศ. ....", "baanyai_cast": 71.8, "others_cast": 78.5, "baanyai_absent": 28.2, "others_absent": 21.5, "gap": 6.7, "is_local": false, "sig": false}, {"i": 200, "title": "พรบ.สร้างเสริมสังคมสันติสุข พ.ศ. .... ซึ่ง นายปรีดา บุญเพลิง", "baanyai_cast": 92.5, "others_cast": 96.3, "baanyai_absent": 7.5, "others_absent": 3.7, "gap": 3.8, "is_local": false, "sig": false}, {"i": 201, "title": "พรบ.กำหนดระยะเวลาดำเนินงานในกระบวนการยุติธรรม พ.ศ. .... วาระ", "baanyai_cast": 59.9, "others_cast": 63.3, "baanyai_absent": 40.1, "others_absent": 36.7, "gap": 3.4, "is_local": false, "sig": false}, {"i": 202, "title": "พรบ.แก้ไขเพิ่มเติมประมวลกฎหมายแพ่งและพาณิชย์", "baanyai_cast": 74.7, "others_cast": 85.7, "baanyai_absent": 25.3, "others_absent": 14.3, "gap": 11.0, "is_local": false, "sig": true}, {"i": 203, "title": "พรบ.มาตรการป้องกันการกระทำความผิดซ้า ในความผิดเกี่ยวกับเพศหร", "baanyai_cast": 65.2, "others_cast": 68.4, "baanyai_absent": 34.8, "others_absent": 31.6, "gap": 3.2, "is_local": false, "sig": false}, {"i": 204, "title": "พรบ.จัดตั้งศาลแรงงานและวิธีพิจารณาคดีแรงงาน ซึ่งคณะกรรมาธิกา", "baanyai_cast": 76.5, "others_cast": 69.6, "baanyai_absent": 23.5, "others_absent": 30.4, "gap": -7.0, "is_local": false, "sig": false}, {"i": 205, "title": "พรบ.ว่าด้วยการปรับเป็นพินัย พ.ศ. .... วาระที่ ๓", "baanyai_cast": 48.8, "others_cast": 46.8, "baanyai_absent": 51.2, "others_absent": 53.2, "gap": -2.0, "is_local": false, "sig": false}, {"i": 206, "title": "พรบ.ยกเลิกกฎหมายบางฉบับที่หมดความจำเป็นหรือซ้ำซ้อนกับกฎหมายอ", "baanyai_cast": 67.1, "others_cast": 65.6, "baanyai_absent": 32.9, "others_absent": 34.4, "gap": -1.5, "is_local": false, "sig": false}, {"i": 207, "title": "พรบ.ประกอบรัฐธรรมนูญว่าด้วยพรรคการเมือง ซึ่ง พันตำรวจเอก ทวี", "baanyai_cast": 90.1, "others_cast": 89.7, "baanyai_absent": 9.9, "others_absent": 10.3, "gap": -0.4, "is_local": false, "sig": false}, {"i": 208, "title": "พรบ.ให้ใช้ประมวลกฎหมายยาเสพติด", "baanyai_cast": 64.0, "others_cast": 66.8, "baanyai_absent": 36.0, "others_absent": 33.2, "gap": 2.7, "is_local": false, "sig": false}, {"i": 209, "title": "พรบ.การปฏิบัติราชการทางอิเล็กทรอนิกส์", "baanyai_cast": 67.3, "others_cast": 73.7, "baanyai_absent": 32.7, "others_absent": 26.3, "gap": 6.4, "is_local": false, "sig": false}, {"i": 210, "title": "ร่างข้อบังคับการประชุมรัฐสภา", "baanyai_cast": 60.4, "others_cast": 78.5, "baanyai_absent": 39.6, "others_absent": 21.5, "gap": 18.1, "is_local": false, "sig": true}, {"i": 211, "title": "พรบ.เงินเดือนและเงินประจำตำแหน่งของข้าราชการพลเรือนกลาโหม พ.", "baanyai_cast": 60.4, "others_cast": 82.0, "baanyai_absent": 39.6, "others_absent": 18.0, "gap": 21.6, "is_local": false, "sig": true}, {"i": 212, "title": "พรบ.การศึกษาแห่งชาติ พ.ศ. .... วาระที่ ๑", "baanyai_cast": 54.0, "others_cast": 60.5, "baanyai_absent": 46.0, "others_absent": 39.5, "gap": 6.4, "is_local": false, "sig": false}, {"i": 213, "title": "พรบ.งบประมาณรายจ่ายประจำปีงบประมาณ พ.ศ. 2564", "baanyai_cast": 90.3, "others_cast": 93.4, "baanyai_absent": 9.7, "others_absent": 6.6, "gap": 3.1, "is_local": false, "sig": false}, {"i": 214, "title": "พรบ.อำนาจเรียกของคณะกรรมาธิการของสภาผู้แทนราษฎรและวุฒิสภา พ.", "baanyai_cast": 78.0, "others_cast": 87.1, "baanyai_absent": 22.0, "others_absent": 12.9, "gap": 9.1, "is_local": false, "sig": true}, {"i": 215, "title": "พรบ.ภาษีสรรพสามิต", "baanyai_cast": 65.1, "others_cast": 77.6, "baanyai_absent": 34.9, "others_absent": 22.4, "gap": 12.5, "is_local": false, "sig": true}]};
+
+function switchView(id, el){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.getElementById('v-'+id).classList.add('on');
+  el.classList.add('on');
+  if(id==='map') initMap();
+  if(id==='timeline') initTimeline();
+}
+
+// ── MAP ──────────────────────────────────────────────────────────
+let mapInited = false;
+async function initMap(){
+  if(mapInited) return; mapInited=true;
+  const wrap = document.getElementById('map-svg-wrap');
+  wrap.innerHTML = '';
+
+  // Load Thailand GeoJSON from CDN
+  let geo;
+  try {
+    const r = await fetch('https://cdn.jsdelivr.net/npm/thailand-geojson@1.0.3/thailand.geojson');
+    geo = await r.json();
+  } catch(e) {
+    // Fallback: show province bubbles
+    showBubbleMap();
+    return;
+  }
+  drawChoropleth(geo, wrap);
+}
+
+function showBubbleMap(){
+  const wrap = document.getElementById('map-svg-wrap');
+  const W = wrap.clientWidth || 600;
+  const H = 560;
+  const svg = d3.select(wrap).append('svg').attr('width',W).attr('height',H);
+  svg.append('text').attr('x',W/2).attr('y',H/2-20).attr('text-anchor','middle')
+    .attr('fill','#5a5e72').attr('font-size',13)
+    .text('ไม่สามารถโหลดแผนที่ได้ — แสดงแบบ Bubble แทน');
+  drawBubbles(svg, W, H);
+}
+
+// ── HHI ─────────────────────────────────────────────────────────
+// Weights: high=3, medium=2, low=1  →  HHI = Σ(s_i²) × 10 000  (0–10 000 scale)
+// High HHI = one dominant family monopolises the province
+// Low HHI  = many roughly equal families share the space
+function calcHHI(pd){
+  if(!pd || !pd.families || pd.families.length===0) return 0;
+  const W={high:3,medium:2,low:1};
+  const totalW = pd.families.reduce((s,f)=>s+(W[f.level]||1),0);
+  if(totalW===0) return 0;
+  const hhi = pd.families.reduce((s,f)=>{
+    const share=(W[f.level]||1)/totalW;
+    return s+share*share;
+  },0);
+  return Math.round(hhi*10000);
+}
+
+function hhiLabel(h){
+  if(h>=7500) return 'กระจุกสูงมาก';
+  if(h>=5000) return 'กระจุกสูง';
+  if(h>=2500) return 'กระจุกปานกลาง';
+  return 'กระจาย';
+}
+
+function drawChoropleth(geo, wrap){
+  const W = Math.min(wrap.clientWidth || 600, 650);
+  const H = 580;
+  const svg = d3.select(wrap).append('svg').attr('width',W).attr('height',H)
+    .style('background','transparent');
+
+  const proj = d3.geoMercator().fitSize([W-20, H-20], geo);
+  const path = d3.geoPath().projection(proj);
+
+  // Province name normalization
+  function matchProv(featName){
+    const n = featName.replace('จังหวัด','').replace('Province','').trim();
+    // try direct match
+    if(DATA.province[n]) return n;
+    // fuzzy
+    for(const k of Object.keys(DATA.province)){
+      if(n.includes(k)||k.includes(n)) return k;
+    }
+    return null;
+  }
+
+  // Draw provinces
+  svg.selectAll('path.province')
+    .data(geo.features)
+    .enter().append('path')
+    .attr('class','province')
+    .attr('d', path)
+    .attr('fill', d=>{
+      const pname = matchProv(d.properties.name||d.properties.NAME||'');
+      const pd = pname ? DATA.province[pname] : null;
+      if(!pd) return '#1e2030';
+      const hhi = calcHHI(pd);
+      const t = hhi / 10000; // 0–1
+      // Low HHI (dispersed) → cool blue-grey; High HHI (concentrated) → hot amber→red
+      if(t < 0.25){
+        const s = t/0.25;
+        return `rgb(${Math.round(20+s*20)},${Math.round(30+s*60)},${Math.round(50+s*70)})`;
+      } else if(t < 0.5){
+        const s = (t-0.25)/0.25;
+        return `rgb(${Math.round(40+s*100)},${Math.round(90+s*60)},${Math.round(120-s*70)})`;
+      } else if(t < 0.75){
+        const s = (t-0.5)/0.25;
+        return `rgb(${Math.round(140+s*80)},${Math.round(150-s*60)},${Math.round(50-s*30)})`;
+      } else {
+        const s = (t-0.75)/0.25;
+        return `rgb(${Math.round(220+s*30)},${Math.round(90-s*40)},${Math.round(20-s*10)})`;
+      }
+    })
+    .attr('stroke','#2e3040')
+    .attr('stroke-width',0.5)
+    .style('cursor','pointer')
+    .on('mouseover', function(ev, d){
+      d3.select(this).attr('stroke','#f0c040').attr('stroke-width',1.5);
+      const pname = matchProv(d.properties.name||d.properties.NAME||'');
+      const pd = pname ? DATA.province[pname] : null;
+      if(pd){
+        const hhi = calcHHI(pd);
+        d3.select(this).attr('title',`${pname} — HHI ${hhi.toLocaleString()}`);
+      }
+    })
+    .on('mouseout', function(ev, d){
+      d3.select(this).attr('stroke','#2e3040').attr('stroke-width',0.5);
+    })
+    .on('click', (ev, d)=>{
+      const pname = matchProv(d.properties.name||d.properties.NAME||'');
+      if(pname && DATA.province[pname]) showProvInfo(pname, DATA.province[pname]);
+    });
+
+  // AOJ dots overlay
+  geo.features.forEach(d=>{
+    const pname = matchProv(d.properties.name||d.properties.NAME||'');
+    const pd = pname ? DATA.province[pname] : null;
+    if(!pd || !pd.aoj) return;
+    const centroid = path.centroid(d);
+    if(!centroid[0]) return;
+    svg.append('circle')
+      .attr('cx', centroid[0]).attr('cy', centroid[1])
+      .attr('r', 4)
+      .attr('fill','#ff8070')
+      .attr('stroke','#141417').attr('stroke-width',1)
+      .style('pointer-events','none');
+  });
+
+  // High dots
+  geo.features.forEach(d=>{
+    const pname = matchProv(d.properties.name||d.properties.NAME||'');
+    const pd = pname ? DATA.province[pname] : null;
+    if(!pd || !pd.high) return;
+    const centroid = path.centroid(d);
+    if(!centroid[0]) return;
+    svg.append('circle')
+      .attr('cx', centroid[0]+5).attr('cy', centroid[1]-5)
+      .attr('r', 3)
+      .attr('fill','#f0c040')
+      .attr('stroke','#141417').attr('stroke-width',1)
+      .style('pointer-events','none');
+  });
+
+  // HHI Legend scale — blue (dispersed) → amber → red (concentrated)
+  const scaleEl = document.getElementById('map-scale');
+  scaleEl.innerHTML = '';
+  for(let i=0;i<=11;i++){
+    const t = i/11;
+    let col;
+    if(t<0.25){ const s=t/0.25; col=`rgb(${Math.round(20+s*20)},${Math.round(30+s*60)},${Math.round(50+s*70)})`; }
+    else if(t<0.5){ const s=(t-0.25)/0.25; col=`rgb(${Math.round(40+s*100)},${Math.round(90+s*60)},${Math.round(120-s*70)})`; }
+    else if(t<0.75){ const s=(t-0.5)/0.25; col=`rgb(${Math.round(140+s*80)},${Math.round(150-s*60)},${Math.round(50-s*30)})`; }
+    else { const s=(t-0.75)/0.25; col=`rgb(${Math.round(220+s*30)},${Math.round(90-s*40)},${Math.round(20-s*10)})`; }
+    scaleEl.innerHTML += `<div class="ls-seg" style="background:${col}"></div>`;
+  }
+}
+
+function showProvInfo(pname, pd){
+  const hhi = calcHHI(pd);
+  const label = hhiLabel(hhi);
+  const hhiColor = hhi>=7500?'#ff6040':hhi>=5000?'#e88040':hhi>=2500?'#f0c040':'#64a0ff';
+  const panel = document.getElementById('map-info-panel');
+  panel.innerHTML = `
+    <div class="map-info-title">${pname}</div>
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--br);padding-bottom:8px;margin-bottom:8px">
+      <div>
+        <div style="font-size:10px;color:var(--mu);margin-bottom:2px">HHI (ดัชนีการกระจุกตัว)</div>
+        <div style="font-size:26px;font-weight:600;color:${hhiColor};line-height:1">${hhi.toLocaleString()}</div>
+      </div>
+      <div style="font-size:11px;font-weight:500;color:${hhiColor};padding-bottom:3px">${label}</div>
+    </div>
+    <div class="map-info-row"><span>ตระกูลทั้งหมด</span><span class="map-info-val">${pd.total}</span></div>
+    <div class="map-info-row"><span>High confidence</span><span class="map-info-val">${pd.high}</span></div>
+    <div class="map-info-row"><span>Medium</span><span class="map-info-val">${pd.medium}</span></div>
+    <div class="map-info-row"><span>AOJ linked</span><span class="map-info-val" style="color:#ff8070">${pd.aoj}</span></div>
+    <div style="margin-top:6px;font-size:9px;color:var(--mu);line-height:1.6">
+      HHI = Σ(s<sub>i</sub>²)×10,000 · น้ำหนัก: high=3, medium=2, low=1
+    </div>
+    <div style="margin-top:10px;font-size:10px;color:var(--mu);margin-bottom:5px">ตระกูลในจังหวัด</div>
+    <div style="display:flex;flex-wrap:wrap;gap:3px">
+      ${[...pd.families].sort((a,b)=>(a.level==='high'?0:a.level==='medium'?1:2)-(b.level==='high'?0:b.level==='medium'?1:2)).map(f=>
+        `<span class="fam-chip ${f.level}${f.aoj?' aoj':''}">${f.surname}${f.aoj?' 🏛':''}</span>`
+      ).join('')}
+    </div>`;
+}
+
+// ── TIMELINE ─────────────────────────────────────────────────────
+let tlFilter = 'all';
+let tlInited = false;
+function initTimeline(){
+  if(tlInited) return; tlInited=true;
+  // Stats
+  const motions = DATA.motions;
+  const avgBaanyai = motions.reduce((s,m)=>s+m.baanyai_absent,0)/motions.length;
+  const avgOthers = motions.reduce((s,m)=>s+m.others_absent,0)/motions.length;
+  const localMotions = motions.filter(m=>m.is_local);
+  const avgLocalBaanyai = localMotions.reduce((s,m)=>s+m.baanyai_absent,0)/(localMotions.length||1);
+  document.getElementById('tl-stats').innerHTML = [
+    ['มติทั้งหมด', motions.length],
+    ['Absent เฉลี่ย (บ้านใหญ่)', avgBaanyai.toFixed(1)+'%'],
+    ['Absent เฉลี่ย (ทั่วไป)', avgOthers.toFixed(1)+'%'],
+    ['มติท้องถิ่น/ที่ดิน', localMotions.length],
+    ['Absent ท้องถิ่น (บ้านใหญ่)', avgLocalBaanyai.toFixed(1)+'%'],
+  ].map(([l,v])=>`<div class="stat-card"><div class="stat-v">${v}</div><div class="stat-l">${l}</div></div>`).join('');
+  drawTimeline();
+}
+
+function setFilter(f, el){
+  tlFilter=f;
+  document.querySelectorAll('.ctl-btn').forEach(b=>b.classList.remove('on'));
+  el.classList.add('on');
+  drawTimeline();
+}
+
+function drawTimeline(){
+  const all = DATA.motions;
+  let motions;
+  if(tlFilter==='all') motions=all;
+  else if(tlFilter==='local') motions=all.filter(m=>m.is_local);
+  else if(tlFilter==='sig') motions=all.filter(m=>m.sig);
+  else motions=[...all].sort((a,b)=>b.gap-a.gap).slice(0,40);
+  document.getElementById('tl-filter-count').textContent=`แสดง ${motions.length} มติ`;
+
+  const svgEl = document.getElementById('tl-svg');
+  const W = svgEl.parentElement.clientWidth - 40 || 900;
+  const H = 380;
+  const PAD={t:20,b:80,l:52,r:16};
+  const iW=W-PAD.l-PAD.r, iH=H-PAD.t-PAD.b;
+
+  const svg = d3.select('#tl-svg').attr('width',W).attr('height',H);
+  svg.selectAll('*').remove();
+  const g = svg.append('g').attr('transform',`translate(${PAD.l},${PAD.t})`);
+
+  const x = d3.scaleLinear([0, motions.length-1],[0,iW]);
+  const allVals = motions.flatMap(m=>[m.baanyai_absent,m.others_absent]);
+  const y = d3.scaleLinear([0, Math.max(...allVals)+5],[iH,0]);
+
+  // Grid lines
+  g.selectAll('.gridline').data(y.ticks(5)).enter().append('line')
+    .attr('x1',0).attr('x2',iW)
+    .attr('y1',d=>y(d)).attr('y2',d=>y(d))
+    .attr('stroke','#1e2030').attr('stroke-width',1);
+
+  // Y axis
+  g.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d=>d+'%'))
+    .call(g=>g.select('.domain').remove())
+    .call(g=>g.selectAll('.tick line').attr('stroke','#2e3040'))
+    .call(g=>g.selectAll('.tick text').attr('fill','#5a5e72').attr('font-size',10));
+
+  // Local motion markers (vertical bands)
+  motions.forEach((m,i)=>{
+    if(!m.is_local) return;
+    g.append('rect')
+      .attr('x',x(i)-2).attr('y',0).attr('width',4).attr('height',iH)
+      .attr('fill','#22c55e').attr('opacity',.12);
+    g.append('line')
+      .attr('x1',x(i)).attr('y1',0).attr('x2',x(i)).attr('y2',iH)
+      .attr('stroke','#22c55e').attr('stroke-width',1).attr('stroke-dasharray','2,3').attr('opacity',.6);
+  });
+
+  // Others line
+  const lineOthers = d3.line().x((_,i)=>x(i)).y(d=>y(d.others_absent)).curve(d3.curveCatmullRom.alpha(0.5));
+  g.append('path').datum(motions)
+    .attr('fill','none').attr('stroke','#5090e0').attr('stroke-width',1.5).attr('opacity',.7)
+    .attr('d',lineOthers);
+
+  // Baanyai line
+  const lineBaanyai = d3.line().x((_,i)=>x(i)).y(d=>y(d.baanyai_absent)).curve(d3.curveCatmullRom.alpha(0.5));
+  g.append('path').datum(motions)
+    .attr('fill','none').attr('stroke','#e88040').attr('stroke-width',2).attr('opacity',.9)
+    .attr('d',lineBaanyai);
+
+  // Gap fill area
+  const area = d3.area()
+    .x((_,i)=>x(i))
+    .y0(d=>y(d.others_absent))
+    .y1(d=>y(d.baanyai_absent))
+    .curve(d3.curveCatmullRom.alpha(0.5));
+  g.append('path').datum(motions)
+    .attr('fill','#e88040').attr('opacity',.1)
+    .attr('d',area);
+
+  // Interaction overlay
+  const tip = document.getElementById('tl-tooltip');
+  g.append('rect')
+    .attr('width',iW).attr('height',iH).attr('fill','transparent')
+    .on('mousemove', function(ev){
+      const [mx] = d3.pointer(ev, this);
+      const idx = Math.round(x.invert(Math.max(0,Math.min(mx,iW))));
+      const m = motions[Math.max(0,Math.min(idx,motions.length-1))];
+      if(!m) return;
+      tip.style.display='block';
+      const gap = m.baanyai_absent - m.others_absent;
+      tip.innerHTML=`<b>${m.title}</b><br>
+        <span style="color:#e88040">บ้านใหญ่ขาด: ${m.baanyai_absent}%</span><br>
+        <span style="color:#5090e0">ทั่วไปขาด: ${m.others_absent}%</span><br>
+        <span style="color:${gap>0?'#e88040':'#4ab870'}">Gap: ${gap>0?'+':''}${gap.toFixed(1)}%</span>
+        ${m.is_local?'<br><span style="color:#22c55e">มติท้องถิ่น/ที่ดิน</span>':''}
+        ${m.sig?'<br><span style="color:#f0c040">มีนัยสำคัญทางสถิติ</span>':''}`;
+      let tx=ev.clientX+14, ty=ev.clientY-12;
+      if(tx+310>window.innerWidth)tx=ev.clientX-314;
+      tip.style.left=tx+'px'; tip.style.top=ty+'px';
+      // crosshair
+      svg.selectAll('.crosshair').remove();
+      const gx = x(idx)+PAD.l;
+      svg.append('line').attr('class','crosshair')
+        .attr('x1',gx).attr('y1',PAD.t).attr('x2',gx).attr('y2',H-PAD.b)
+        .attr('stroke','#ffffff').attr('stroke-width',1).attr('opacity',.3).attr('stroke-dasharray','3,3');
+    })
+    .on('mouseleave',()=>{ tip.style.display='none'; svg.selectAll('.crosshair').remove(); });
+
+  // X-axis note
+  svg.append('text').attr('x',PAD.l+iW/2).attr('y',H-8)
+    .attr('text-anchor','middle').attr('fill','#5a5e72').attr('font-size',10)
+    .text(`มติ (n=${motions.length}) — เรียงตามลำดับในไฟล์ข้อมูล · เส้นสีเขียว = มติท้องถิ่น/ที่ดิน`);
+
+  // Sig dots on baanyai line
+  motions.forEach((m,i)=>{
+    if(!m.sig) return;
+    g.append('circle').attr('cx',x(i)).attr('cy',y(m.baanyai_absent))
+      .attr('r',3).attr('fill','#f0c040').attr('stroke','#141417').attr('stroke-width',1);
+  });
+}
+
+// Init first view
+setTimeout(()=>{ initMap(); initTimeline(); },100);
+</script>
+</body>
+</html>
